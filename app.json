@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "SANAD",
+    "slug": "sanad-prototype",
+    "version": "0.3.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0f172a",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0ea5e9"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "qa.cmu.sanad.prototype",
+      "infoPlist": {
+        "LSApplicationQueriesSchemes": ["tel", "whatsapp"]
+      }
+    },
+    "android": {
+      "package": "qa.cmu.sanad.prototype",
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SANAD uses your location so the technician or tow truck can find you."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SANAD lets you attach a photo of your car so the provider knows what to expect.",
+          "cameraPermission": "SANAD lets you take a photo of your car so the provider knows what to expect."
+        }
+      ],
+      "expo-notifications"
+    ]
+  }
+}
