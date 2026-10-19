@@ -17,7 +17,7 @@ npx expo start
 
 Then scan the QR code with the camera (iPhone) or Expo Go (Android), or press `i` for the iOS Simulator.
 
-The project uses **Expo SDK 58** (React Native 0.88), which matches the current Expo Go on the App Store and Play Store. GPS, camera and notifications are best tested on a physical phone.
+The project uses **Expo SDK 57** (React Native 0.86), the same SDK as the course labs, so it opens in Expo Go 57. GPS, camera and notifications are best tested on a physical phone.
 
 Other commands:
 
