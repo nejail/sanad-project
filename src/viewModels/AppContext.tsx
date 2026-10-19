@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import { orderTitle } from '../models/catalog';
-import { buildQuote } from '../models/pricing';
+import { buildQuote, isFirstWashFree } from '../models/pricing';
 import { DEMO_ADDRESSES, DEMO_CARS, DEMO_ORDERS, DEMO_PHONE, DEMO_USER } from '../models/seed';
 import { Address, BookingDraft, Car, Order, OrderStatus, ServiceId } from '../models/types';
 import { clearSession, createSession, readSession } from '../services/session';
@@ -155,6 +155,7 @@ function useAppModel() {
     const d = state.draft;
     if (!a || !d.serviceId || !d.optionId || !d.carId || !d.address) throw new Error('Booking is incomplete');
     const car = a.cars.find((c) => c.id === d.carId);
+    const promoApplied = d.serviceId === 'carwash' && isFirstWashFree(a.orders);
     const order: Order = {
       id: `SND-${Math.max(1042, ...a.orders.map((o) => Number(o.id.replace('SND-', '')) || 0)) + 1}`,
       serviceId: d.serviceId,
@@ -164,7 +165,8 @@ function useAppModel() {
       carLabel: car ? `${car.model} · ${car.plate}` : 'Car',
       address: d.address,
       schedule: d.schedule ?? { kind: 'asap' },
-      quote: buildQuote({ serviceId: d.serviceId, optionId: d.optionId, addOnIds: d.addOnIds, litres: d.litres, distanceKm: d.distanceKm }),
+      quote: buildQuote({ serviceId: d.serviceId, optionId: d.optionId, addOnIds: d.addOnIds, litres: d.litres, distanceKm: d.distanceKm, firstWashFree: promoApplied }),
+      promoApplied,
       payment: d.payment,
       notes: d.notes,
       photoUri: d.photoUri,

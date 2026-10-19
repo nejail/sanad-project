@@ -8,6 +8,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Logo } from '../../components/Logo';
 import { IconName, IconTile } from '../../components/ui';
 import { HOME_SERVICE_ORDER, getService } from '../../models/catalog';
+import { isFirstWashFree } from '../../models/pricing';
 import { ServiceId } from '../../models/types';
 import { RootStackParamList } from '../../navigation/types';
 import { useAccount, useApp } from '../../viewModels/AppContext';
@@ -18,6 +19,7 @@ export default function HomeView() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { startBooking } = useApp();
   const { user, cars, orders } = useAccount();
+  const firstWashFree = isFirstWashFree(orders);
   const active = orders.find((o) => o.status === 'confirmed' || o.status === 'on_the_way' || o.status === 'arrived');
 
   const open = (id: ServiceId) => {
@@ -40,15 +42,20 @@ export default function HomeView() {
           <Text style={[font.h2, { fontSize: 22 }]}>{user.name}</Text>
         </View>
 
-        <LinearGradient colors={[colors.promoStart, colors.promoEnd]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.promo}>
-          <View style={styles.promoIcon}>
-            <Ionicons name="gift-outline" size={20} color={colors.promoEnd} />
-          </View>
-          <View>
-            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Launch Special</Text>
-            <Text style={{ color: '#ede9fe', fontSize: 12 }}>Your first car wash is FREE</Text>
-          </View>
-        </LinearGradient>
+        {firstWashFree ? (
+          <Pressable onPress={() => open('carwash')} accessibilityRole="button" accessibilityLabel="Launch Special, book your free car wash" testID="promo-banner">
+            <LinearGradient colors={[colors.promoStart, colors.promoEnd]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.promo}>
+              <View style={styles.promoIcon}>
+                <Ionicons name="gift-outline" size={20} color={colors.promoEnd} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15 }}>Launch Special</Text>
+                <Text style={{ color: '#ede9fe', fontSize: 12 }}>Your first car wash is FREE</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#fff" />
+            </LinearGradient>
+          </Pressable>
+        ) : null}
 
         {active ? (
           <Pressable style={styles.active} onPress={() => nav.navigate('TrackOrder', { orderId: active.id })}>

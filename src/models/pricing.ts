@@ -9,6 +9,15 @@ export interface QuoteInput {
   addOnIds?: string[];
   litres?: number;
   distanceKm?: number;
+  /** Launch Special: the car wash package is free on the customer's first promo order (add-ons still charged). */
+  firstWashFree?: boolean;
+}
+
+export const LAUNCH_SPECIAL_LABEL = 'Launch Special: first car wash free';
+
+/** Orders before the launch special never used it, so only orders marked promoApplied count. */
+export function isFirstWashFree(orders: { promoApplied?: boolean; status: string }[]): boolean {
+  return !orders.some((o) => o.promoApplied && o.status !== 'cancelled');
 }
 
 /**
@@ -41,6 +50,9 @@ export function buildQuote(input: QuoteInput): Quote {
     default: {
       lines.push({ label: option.title, amount: option.price });
       if (option.priceLabel.endsWith('+')) isEstimate = true;
+      if (input.serviceId === 'carwash' && input.firstWashFree) {
+        lines.push({ label: LAUNCH_SPECIAL_LABEL, amount: -option.price });
+      }
       for (const id of input.addOnIds ?? []) {
         const addOn = service.addOns?.find((a) => a.id === id);
         if (addOn) lines.push({ label: addOn.title, amount: addOn.price });
@@ -48,7 +60,7 @@ export function buildQuote(input: QuoteInput): Quote {
     }
   }
 
-  const subtotal = round2(lines.reduce((sum, l) => sum + l.amount, 0));
+  const subtotal = Math.max(0, round2(lines.reduce((sum, l) => sum + l.amount, 0)));
   const vat = round2(subtotal * VAT_RATE);
   return { lines, subtotal, vat, total: round2(subtotal + vat), isEstimate };
 }

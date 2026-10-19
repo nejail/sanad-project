@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo } from 'react';
 import { Alert, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Chip, Field, IconName, OptionRow, PriceSummary, PrimaryButton, Screen, SectionLabel } from '../../components/ui';
+import { Banner, Chip, Field, IconName, OptionRow, PriceSummary, PrimaryButton, Screen, SectionLabel } from '../../components/ui';
 import { getService } from '../../models/catalog';
-import { buildQuote } from '../../models/pricing';
+import { buildQuote, isFirstWashFree } from '../../models/pricing';
 import { ScreenProps } from '../../navigation/types';
 import { pickCarPhoto } from '../../services/media';
-import { useApp } from '../../viewModels/AppContext';
+import { useAccount, useApp } from '../../viewModels/AppContext';
 import { colors, font } from '../../theme';
 
 const LITRES = [20, 40, 60];
@@ -16,6 +16,8 @@ const TOW_KM = [2, 5, 10, 20];
 export default function ServiceView({ navigation, route }: ScreenProps<'Service'>) {
   const service = getService(route.params.serviceId);
   const { draft, updateDraft } = useApp();
+  const { orders } = useAccount();
+  const firstWashFree = isFirstWashFree(orders);
   const danger = service.accent === 'danger';
   const optionId = draft.optionId ?? service.options[0].id;
 
@@ -26,8 +28,8 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
   }, [service.id]);
 
   const quote = useMemo(
-    () => buildQuote({ serviceId: service.id, optionId, addOnIds: draft.addOnIds, litres: draft.litres, distanceKm: draft.distanceKm }),
-    [service.id, optionId, draft.addOnIds, draft.litres, draft.distanceKm],
+    () => buildQuote({ serviceId: service.id, optionId, addOnIds: draft.addOnIds, litres: draft.litres, distanceKm: draft.distanceKm, firstWashFree }),
+    [service.id, optionId, draft.addOnIds, draft.litres, draft.distanceKm, firstWashFree],
   );
 
   const toggleAddOn = (id: string) =>
@@ -61,6 +63,9 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
           <Ionicons name="alert-circle" size={18} color={colors.danger} />
           <Text style={{ color: '#fecaca', flex: 1, fontSize: 13 }}>In danger or blocking traffic? Call 999 first, then request help here.</Text>
         </View>
+      ) : null}
+      {service.id === 'carwash' && firstWashFree ? (
+        <Banner icon="gift-outline" text="Launch Special: your first car wash package is free. Add-ons are still charged." />
       ) : null}
       <SectionLabel>{service.prompt}</SectionLabel>
       {service.options.map((o) => (

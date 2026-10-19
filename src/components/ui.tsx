@@ -230,9 +230,16 @@ export function Chip({ label, selected, onPress }: { label: string; selected: bo
 export function PriceSummary({ quote }: { quote: Quote }) {
   return (
     <Card style={{ gap: 8 }}>
-      {quote.lines.map((l) => (
-        <Row key={l.label} label={l.label} value={formatQAR(l.amount)} />
-      ))}
+      {quote.lines.map((l) =>
+        l.amount < 0 ? (
+          <View key={l.label} style={styles.summaryRow}>
+            <Text style={{ color: colors.success, fontSize: 13, flexShrink: 1 }}>{l.label}</Text>
+            <Text style={{ color: colors.success, fontWeight: '700', fontSize: 13, marginLeft: 12 }}>{formatQAR(l.amount)}</Text>
+          </View>
+        ) : (
+          <Row key={l.label} label={l.label} value={formatQAR(l.amount)} />
+        ),
+      )}
       <Row label="VAT (5%)" value={formatQAR(quote.vat)} />
       <View style={styles.divider} />
       <View style={styles.summaryRow}>

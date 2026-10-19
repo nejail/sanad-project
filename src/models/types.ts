@@ -103,6 +103,7 @@ export interface Order {
   payment: 'cash' | 'card';
   notes?: string;
   photoUri?: string;
+  promoApplied?: boolean;
   status: OrderStatus;
   createdAt: string;
   provider: Provider;

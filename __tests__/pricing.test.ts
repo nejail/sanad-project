@@ -1,4 +1,4 @@
-import { buildQuote, distanceKm, etaMinutes, formatQAR } from '../src/models/pricing';
+import { buildQuote, distanceKm, etaMinutes, formatQAR, isFirstWashFree } from '../src/models/pricing';
 
 describe('buildQuote', () => {
   it('matches the wireframe total for a battery jump start (50 + 5% VAT)', () => {
@@ -35,6 +35,25 @@ describe('buildQuote', () => {
 
   it('marks "from" prices such as battery replacement (250+) as estimates', () => {
     expect(buildQuote({ serviceId: 'battery', optionId: 'replace' }).isEstimate).toBe(true);
+  });
+
+  it('makes the first car wash package free but still charges add-ons', () => {
+    const free = buildQuote({ serviceId: 'carwash', optionId: 'full', firstWashFree: true });
+    expect(free.total).toBe(0);
+    const withAddOn = buildQuote({ serviceId: 'carwash', optionId: 'vip', addOnIds: ['interior'], firstWashFree: true });
+    expect(withAddOn.subtotal).toBe(25);
+    expect(withAddOn.total).toBe(26.25);
+  });
+
+  it('only applies the launch special to car washes', () => {
+    expect(buildQuote({ serviceId: 'battery', optionId: 'jump', firstWashFree: true }).total).toBe(52.5);
+  });
+
+  it('offers the free wash until an order has used it', () => {
+    expect(isFirstWashFree([])).toBe(true);
+    expect(isFirstWashFree([{ status: 'done' }])).toBe(true); // older orders made before the promo
+    expect(isFirstWashFree([{ status: 'done', promoApplied: true }])).toBe(false);
+    expect(isFirstWashFree([{ status: 'cancelled', promoApplied: true }])).toBe(true);
   });
 
   it('formats QAR with two decimals', () => {

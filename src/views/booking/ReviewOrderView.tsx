@@ -3,7 +3,7 @@ import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { Ionicons } from '@expo/vector-icons';
 import { Card, OptionRow, PriceSummary, PrimaryButton, Row, Screen, SectionLabel } from '../../components/ui';
 import { getOption, getService } from '../../models/catalog';
-import { buildQuote } from '../../models/pricing';
+import { buildQuote, isFirstWashFree } from '../../models/pricing';
 import { ScreenProps } from '../../navigation/types';
 import { useAccount, useApp } from '../../viewModels/AppContext';
 import { colors } from '../../theme';
@@ -11,7 +11,8 @@ import { colors } from '../../theme';
 /** 09 Review Order */
 export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder'>) {
   const { draft, updateDraft, placeOrder } = useApp();
-  const { cars } = useAccount();
+  const { cars, orders } = useAccount();
+  const firstWashFree = draft.serviceId === 'carwash' && isFirstWashFree(orders);
   const [promo, setPromo] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -21,8 +22,8 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
   const option = getOption(serviceId, optionId);
   const car = cars.find((c) => c.id === draft.carId);
   const quote = useMemo(
-    () => buildQuote({ serviceId, optionId, addOnIds: draft.addOnIds, litres: draft.litres, distanceKm: draft.distanceKm }),
-    [serviceId, optionId, draft.addOnIds, draft.litres, draft.distanceKm],
+    () => buildQuote({ serviceId, optionId, addOnIds: draft.addOnIds, litres: draft.litres, distanceKm: draft.distanceKm, firstWashFree }),
+    [serviceId, optionId, draft.addOnIds, draft.litres, draft.distanceKm, firstWashFree],
   );
   const when = draft.schedule?.kind === 'later' ? `${draft.schedule.date} · ${draft.schedule.time}` : 'Now (ASAP)';
 
