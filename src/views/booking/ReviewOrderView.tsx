@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Banner, Card, IconTile, OptionRow, PriceSummary, PrimaryButton, Radio, Row, Screen, SectionLabel } from '../../components/ui';
+import { Banner, Card, IconTile, LinkText, OptionRow, PriceSummary, PrimaryButton, Radio, Row, Screen, SectionLabel } from '../../components/ui';
 import { SERVICE_PLACE_KIND } from '../../api/osm';
 import { getOption, getService } from '../../models/catalog';
 import { buildQuote, isFirstWashFree } from '../../models/pricing';
@@ -94,10 +94,13 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
           </View>
         </Card>
       ) : (
-        <Banner
-          tone={providers.error ? 'danger' : 'info'}
-          text={providers.error ? `Live map data unavailable (${providers.error}). A provider will be assigned after you order.` : 'No providers found nearby. One will be assigned after you order.'}
-        />
+        <>
+          <Banner
+            tone={providers.error ? 'danger' : 'info'}
+            text={providers.error ? `Couldn't load nearby providers (${providers.error}). One will be assigned after you order.` : 'No providers found nearby. One will be assigned after you order.'}
+          />
+          {providers.error ? <LinkText label="Try again" onPress={providers.retry} /> : null}
+        </>
       )}
 
       {towing ? (
@@ -118,7 +121,10 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
             );
           })}
           {!garages.loading && garages.places.length === 0 ? (
-            <Banner tone="danger" text={`Could not load garages${garages.error ? ` (${garages.error})` : ''}. The estimate uses the distance you chose earlier.`} />
+            <>
+              <Banner tone="danger" text={`Couldn't load garages${garages.error ? ` (${garages.error})` : ''}. The estimate uses the distance you chose earlier.`} />
+              <LinkText label="Try again" onPress={garages.retry} />
+            </>
           ) : null}
         </>
       ) : null}

@@ -11,10 +11,21 @@ import { Platform } from 'react-native';
 import { distanceKm } from '../models/pricing';
 import { Coordinates, ServiceId } from '../models/types';
 
-export const OVERPASS_URL = 'https://overpass-api.de/api/interpreter';
+/**
+ * Public Overpass servers. The main one is often overloaded (it timed out on the device test),
+ * so the same query is sent to several mirrors at once and the first good answer wins.
+ */
+export const OVERPASS_MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+];
+export const OVERPASS_URL = OVERPASS_MIRRORS[0];
 export const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
 const USER_AGENT = 'SANAD-prototype/0.3 (CMU-Q 67-443 student project)';
-const TIMEOUT_MS = 12000;
+const TIMEOUT_MS = 12000; // OSRM
+const OVERPASS_TIMEOUT_MS = 20000;
 
 export type PlaceKind = 'garage' | 'fuel' | 'carwash' | 'tyres';
 
@@ -129,9 +140,10 @@ export function parseOsrmRoute(json: unknown): Route {
   };
 }
 
-async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
+async function fetchJson(url: string, init?: RequestInit, timeoutMs = TIMEOUT_MS, cancel?: AbortSignal): Promise<unknown> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  cancel?.addEventListener('abort', () => controller.abort());
   try {
     const res = await fetch(url, {
       ...init,
@@ -146,26 +158,58 @@ async function fetchJson(url: string, init?: RequestInit): Promise<unknown> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return await res.json();
   } catch (e) {
-    if ((e as Error).name === 'AbortError') throw new Error('Request timed out');
+    const msg = String((e as Error).message ?? e);
+    if ((e as Error).name === 'AbortError' || /cancel|abort/i.test(msg)) throw new Error('timed out');
     throw e;
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** GET nearby places of one kind (Overpass). Widens the search once if nothing is found. */
-export async function fetchNearbyPlaces(center: Coordinates, kind: PlaceKind, radiusM = 5000, limit = 10): Promise<Place[]> {
-  for (const r of [radiusM, radiusM * 3]) {
-    const body = `data=${encodeURIComponent(buildOverpassQuery(center, kind, r))}`;
-    const json = await fetchJson(OVERPASS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
+/** Sends one Overpass query to every mirror at once; resolves with the first valid JSON and cancels the rest. */
+export function queryOverpass(query: string, fetcher: typeof fetchJson = fetchJson): Promise<unknown> {
+  const body = `data=${encodeURIComponent(query)}`;
+  const cancel = new AbortController();
+  return new Promise((resolve, reject) => {
+    let failed = 0;
+    const errors: string[] = [];
+    OVERPASS_MIRRORS.forEach((url) => {
+      fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body }, OVERPASS_TIMEOUT_MS, cancel.signal)
+        .then((json) => {
+          if (!Array.isArray((json as { elements?: unknown })?.elements)) throw new Error('bad response');
+          cancel.abort();
+          resolve(json);
+        })
+        .catch((e) => {
+          errors.push((e as Error).message);
+          failed += 1;
+          if (failed === OVERPASS_MIRRORS.length) {
+            reject(new Error(errors.every((m) => m === 'timed out') ? 'map servers timed out' : 'map servers unavailable'));
+          }
+        });
     });
-    const places = parseOverpass(json, center, kind, limit);
-    if (places.length) return places;
-  }
-  return [];
+  });
+}
+
+// Results are cached per area and kind, so screens that ask twice (e.g. provider + tow garages) share one request.
+const placeCache = new Map<string, Promise<Place[]>>();
+
+/** GET nearby places of one kind (Overpass). Widens the search once if nothing is found. */
+export function fetchNearbyPlaces(center: Coordinates, kind: PlaceKind, radiusM = 5000, limit = 10): Promise<Place[]> {
+  const key = `${kind}:${center.latitude.toFixed(3)},${center.longitude.toFixed(3)}:${radiusM}:${limit}`;
+  const cached = placeCache.get(key);
+  if (cached) return cached;
+  const request = (async () => {
+    for (const r of [radiusM, radiusM * 3]) {
+      const json = await queryOverpass(buildOverpassQuery(center, kind, r));
+      const places = parseOverpass(json, center, kind, limit);
+      if (places.length) return places;
+    }
+    return [];
+  })();
+  placeCache.set(key, request);
+  request.catch(() => placeCache.delete(key)); // let a retry try again
+  return request;
 }
 
 /** GET a driving route between two points (OSRM). */

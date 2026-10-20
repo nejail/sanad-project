@@ -65,3 +65,26 @@ describe('OSRM route parsing', () => {
     expect(mid.latitude).toBeLessThan(25.3155);
   });
 });
+
+describe('Overpass mirror race', () => {
+  const { queryOverpass, OVERPASS_MIRRORS } = require('../src/api/osm');
+  const ok = { elements: [] };
+
+  it('resolves with the first mirror that answers, even if the main server times out', async () => {
+    const fetcher = jest.fn((url: string) =>
+      url === OVERPASS_MIRRORS[0] ? Promise.reject(new Error('timed out')) : url === OVERPASS_MIRRORS[1] ? Promise.resolve(ok) : new Promise(() => undefined),
+    );
+    await expect(queryOverpass('q', fetcher)).resolves.toBe(ok);
+    expect(fetcher).toHaveBeenCalledTimes(OVERPASS_MIRRORS.length);
+  });
+
+  it('fails with a short message only when every mirror fails', async () => {
+    const fetcher = jest.fn(() => Promise.reject(new Error('timed out')));
+    await expect(queryOverpass('q', fetcher)).rejects.toThrow('map servers timed out');
+  });
+
+  it('ignores mirrors that return an error page instead of JSON elements', async () => {
+    const fetcher = jest.fn((url: string) => Promise.resolve(url === OVERPASS_MIRRORS[2] ? ok : { remark: 'runtime error: too busy' }));
+    await expect(queryOverpass('q', fetcher)).resolves.toBe(ok);
+  });
+});

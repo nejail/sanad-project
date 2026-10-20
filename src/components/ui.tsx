@@ -253,8 +253,8 @@ export function PriceSummary({ quote }: { quote: Quote }) {
 export function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <View style={styles.summaryRow}>
-      <Text style={[font.small, { fontSize: 13, flexShrink: 1 }]}>{label}</Text>
-      <Text style={{ color: colors.text, fontWeight: strong ? '700' : '600', fontSize: 13, marginLeft: 12 }}>{value}</Text>
+      <Text style={[font.small, { fontSize: 13, flexShrink: 0 }]}>{label}</Text>
+      <Text style={{ color: colors.text, fontWeight: strong ? '700' : '600', fontSize: 13, marginLeft: 12, flex: 1, textAlign: 'right' }}>{value}</Text>
     </View>
   );
 }
