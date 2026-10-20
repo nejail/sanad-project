@@ -22,7 +22,7 @@ The project uses **Expo SDK 57** (React Native 0.86), the same SDK as the course
 Other commands:
 
 ```bash
-npm test            # 44 unit tests (pricing, OTP rules, validation, tracking, API JSON parsing, Firestore mapping)
+npm test            # 52 unit tests (pricing, OTP rules, validation, tracking, API JSON parsing, Firestore mapping)
 npm run typecheck   # TypeScript strict mode
 npx expo start --web  # browser preview (maps, secure store, haptics are stubbed)
 ```
@@ -36,7 +36,7 @@ npx expo start --web  # browser preview (maps, secure store, haptics are stubbed
 | 3 | Enter the 6-digit code shown in the notification | Returning user lands on **Home with registered cars loaded** |
 | 4 | Tap any service, e.g. **Emergency 24/7 > Towing** | Options, price breakdown with 5% VAT, optional photo |
 | 5 | Select Vehicle > Location > **Use My Current Location** | Live GPS, reverse geocoded address, real map |
-| 6 | Schedule > Review Order | Nearest real garage (Overpass API) with road distance and ETA (OSRM API); for towing, pick the garage to tow to and the price uses the road distance |
+| 6 | Schedule > Review Order | Nearest real garage (OpenStreetMap via Nominatim/Overpass) with road distance and ETA (OSRM API); for towing, pick the garage to tow to and the price uses the road distance |
 | 7 | Place Order > Track Order | Provider drives towards you along the real road route, status and ETA update, notifications fire |
 | 8 | Close and reopen the app | Session is restored from secure storage, no second sign in |
 | 9 | Profile > Logout, then sign in with any other number (e.g. 6655 4433) | No account found > add name > **Add Your First Car** > Home |
@@ -60,7 +60,7 @@ Splash, Sign In, Register, Verify OTP, Add First Car, Home, six service screens 
 | Cars, addresses, orders offline | `@react-native-async-storage/async-storage` | Yes | Real | Cache of backend data |
 | Secure sign in | OTP rules in `src/models/otp.ts` | n/a | Simulated: code generated on device | Server-side OTP (e.g. Twilio Verify or Supabase phone auth) so the code never exists on the phone |
 | Contact provider / SOS | `Linking` (`tel:`, WhatsApp link) | Yes | Real | Masked numbers through a calling provider |
-| Nearby providers and garages | Overpass API (OpenStreetMap JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts` | Self-hosted Overpass or Google Places |
+| Nearby providers and garages | Nominatim search API, with Overpass asked in parallel (OpenStreetMap JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts`; Nominatim answers on device, Overpass timed out from Qatar | Self-hosted service or Google Places |
 | Road distance, ETA, route | OSRM route API (JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts` | Self-hosted OSRM or Google Routes |
 | Backend data | Cloud Firestore (structure in `src/models/firestore.ts`, rules in `firebase/firestore.rules`) | Needs dev build | Structure and converters defined | Next sprint |
 | Navigation | React Navigation (native stack + bottom tabs) | Yes | Real | Same |

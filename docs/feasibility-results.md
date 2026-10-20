@@ -29,3 +29,15 @@ Run with the in-app Feasibility Tests screen (Profile > Technology Feasibility T
 - The notification test confirms the notification was scheduled; whether it appeared on screen is checked by eye.
 - GPS returned a fix accurate to 8 m in about half a second, which is enough to place a driver at the right exit or parking area.
 - Not covered by these tests: real SMS OTP, remote push notifications, payments, and live provider tracking. These need a backend and are listed under Known limitations in the README.
+
+## Run 2: external APIs (2026-10-20)
+
+Same iPhone 17 Pro, after the external APIs were added. All 12 device tests passed again (GPS ±12 m in 238 ms, network 173 ms).
+
+| Technology | Test | Result | Time | Detail |
+|---|---|---|---|---|
+| Overpass API | Nearby garages | Fail | 20013 ms | All 4 public servers timed out (first attempt with one server timed out after 12 s) |
+| Nominatim search API | Nearby garages | Pass | 585 ms | 5 garages parsed; nearest "International Auto Electricals", 1.93 km |
+| OSRM route API | Road distance and ETA | Pass | 402 ms | Al Sadd to Education City: 8.96 km, 13 min, 302 route points (152 to 452 ms across runs) |
+
+Result: the app asks Nominatim and Overpass at the same time and uses the first that answers, so on the phone nearby garages come from Nominatim in under a second.

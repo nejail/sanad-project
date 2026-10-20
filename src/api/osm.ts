@@ -22,6 +22,15 @@ export const OVERPASS_MIRRORS = [
   'https://overpass.private.coffee/api/interpreter',
 ];
 export const OVERPASS_URL = OVERPASS_MIRRORS[0];
+
+/** Nominatim (OpenStreetMap search) is a second, independent source of the same business data. */
+export const NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search';
+const NOMINATIM_TERMS: Record<PlaceKind, string> = {
+  garage: 'car repair',
+  tyres: 'tyres',
+  fuel: 'fuel',
+  carwash: 'car wash',
+};
 export const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
 const USER_AGENT = 'SANAD-prototype/0.3 (CMU-Q 67-443 student project)';
 const TIMEOUT_MS = 12000; // OSRM
@@ -38,6 +47,7 @@ export interface Place {
   distanceKm: number; // straight-line distance from the search centre
   phone?: string;
   openingHours?: string;
+  source?: 'overpass' | 'nominatim';
 }
 
 export interface Route {
@@ -113,6 +123,7 @@ export function parseOverpass(json: unknown, center: Coordinates, kind: PlaceKin
       distanceKm: Math.round(distanceKm(center, coords) * 100) / 100,
       phone: tags.phone || tags['contact:phone'],
       openingHours: tags.opening_hours,
+      source: 'overpass',
     });
   }
   // Named businesses first (a customer can recognise them), then by distance.
@@ -168,45 +179,135 @@ async function fetchJson(url: string, init?: RequestInit, timeoutMs = TIMEOUT_MS
 
 /** Sends one Overpass query to every mirror at once; resolves with the first valid JSON and cancels the rest. */
 export function queryOverpass(query: string, fetcher: typeof fetchJson = fetchJson): Promise<unknown> {
-  const body = `data=${encodeURIComponent(query)}`;
   const cancel = new AbortController();
   return new Promise((resolve, reject) => {
     let failed = 0;
     const errors: string[] = [];
     OVERPASS_MIRRORS.forEach((url) => {
-      fetcher(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body }, OVERPASS_TIMEOUT_MS, cancel.signal)
+      // GET with ?data= is the most widely supported way to call Overpass.
+      fetcher(`${url}?data=${encodeURIComponent(query)}`, undefined, OVERPASS_TIMEOUT_MS, cancel.signal)
         .then((json) => {
           if (!Array.isArray((json as { elements?: unknown })?.elements)) throw new Error('bad response');
           cancel.abort();
           resolve(json);
         })
         .catch((e) => {
-          errors.push((e as Error).message);
+          errors.push(`${hostOf(url)}: ${(e as Error).message}`);
           failed += 1;
           if (failed === OVERPASS_MIRRORS.length) {
-            reject(new Error(errors.every((m) => m === 'timed out') ? 'map servers timed out' : 'map servers unavailable'));
+            const allTimedOut = errors.every((m) => m.endsWith('timed out'));
+            reject(new Error(allTimedOut ? 'map servers timed out' : `map servers unavailable (${errors.join('; ')})`));
           }
         });
     });
   });
 }
 
+const hostOf = (url: string) => url.replace(/^https?:\/\//, '').split('/')[0];
+
+/** Builds the Nominatim search URL for one kind of place inside a box around the driver. */
+export function buildNominatimUrl(center: Coordinates, kind: PlaceKind, radiusKm: number, limit: number): string {
+  const dLat = radiusKm / 111;
+  const dLon = radiusKm / (111 * Math.cos((center.latitude * Math.PI) / 180));
+  const viewbox = [center.longitude - dLon, center.latitude + dLat, center.longitude + dLon, center.latitude - dLat].map((n) => n.toFixed(5)).join(',');
+  const q = encodeURIComponent(NOMINATIM_TERMS[kind]);
+  return `${NOMINATIM_URL}?format=jsonv2&q=${q}&viewbox=${viewbox}&bounded=1&countrycodes=qa&limit=${limit}&extratags=1`;
+}
+
+interface NominatimResult {
+  osm_type?: string;
+  osm_id?: number;
+  lat?: string;
+  lon?: string;
+  name?: string;
+  display_name?: string;
+  extratags?: Record<string, string> | null;
+}
+
+/** Parses a Nominatim jsonv2 search response into Places (same rules as Overpass). */
+export function parseNominatim(json: unknown, center: Coordinates, kind: PlaceKind, limit = 10): Place[] {
+  if (!Array.isArray(json)) throw new Error('Unexpected Nominatim response: not an array');
+  const seen = new Set<string>();
+  const places: (Place & { named: boolean })[] = [];
+  for (const r of json as NominatimResult[]) {
+    const lat = Number(r.lat);
+    const lon = Number(r.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const id = `${r.osm_type ?? 'node'}/${r.osm_id ?? `${lat},${lon}`}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const realName = r.name || undefined;
+    const coords = { latitude: lat, longitude: lon };
+    places.push({
+      id,
+      named: !!realName,
+      name: realName || r.display_name?.split(',')[0] || DEFAULT_NAMES[kind],
+      kind,
+      coords,
+      distanceKm: Math.round(distanceKm(center, coords) * 100) / 100,
+      phone: r.extratags?.phone || r.extratags?.['contact:phone'],
+      openingHours: r.extratags?.opening_hours,
+      source: 'nominatim',
+    });
+  }
+  return places
+    .sort((a, b) => Number(b.named) - Number(a.named) || a.distanceKm - b.distanceKm)
+    .slice(0, limit)
+    .map(({ named, ...p }) => p);
+}
+
+/** GET places from Nominatim (one request, no widening). */
+export async function fetchNominatimPlaces(center: Coordinates, kind: PlaceKind, radiusKm: number, limit = 10): Promise<Place[]> {
+  return parseNominatim(await fetchJson(buildNominatimUrl(center, kind, radiusKm, limit)), center, kind, limit);
+}
+
+/** GET places from Overpass only (all mirrors raced). */
+export async function fetchOverpassPlaces(center: Coordinates, kind: PlaceKind, radiusM: number, limit = 10): Promise<Place[]> {
+  return parseOverpass(await queryOverpass(buildOverpassQuery(center, kind, radiusM)), center, kind, limit);
+}
+
+/** Resolves with the first task that succeeds; rejects with every error if all fail. */
+function firstSuccess<T>(tasks: Promise<T>[]): Promise<T> {
+  return new Promise((resolve, reject) => {
+    let failed = 0;
+    const errors: string[] = [];
+    tasks.forEach((t) =>
+      t.then(resolve, (e) => {
+        errors.push((e as Error).message);
+        if (++failed === tasks.length) reject(new Error(errors.join(' | ')));
+      }),
+    );
+  });
+}
+
 // Results are cached per area and kind, so screens that ask twice (e.g. provider + tow garages) share one request.
 const placeCache = new Map<string, Promise<Place[]>>();
 
-/** GET nearby places of one kind (Overpass). Widens the search once if nothing is found. */
+/** Nearby places of one kind from OpenStreetMap (Overpass or Nominatim). Widens the search once if nothing is found. */
 export function fetchNearbyPlaces(center: Coordinates, kind: PlaceKind, radiusM = 5000, limit = 10): Promise<Place[]> {
   const key = `${kind}:${center.latitude.toFixed(3)},${center.longitude.toFixed(3)}:${radiusM}:${limit}`;
   const cached = placeCache.get(key);
   if (cached) return cached;
-  const request = (async () => {
+  // Ask Overpass (all mirrors) and Nominatim at the same time; use whichever returns places first.
+  const overpass = (async () => {
     for (const r of [radiusM, radiusM * 3]) {
-      const json = await queryOverpass(buildOverpassQuery(center, kind, r));
-      const places = parseOverpass(json, center, kind, limit);
+      const places = parseOverpass(await queryOverpass(buildOverpassQuery(center, kind, r)), center, kind, limit);
+      if (places.length) return places.map((p) => ({ ...p, source: 'overpass' as const }));
+    }
+    throw new Error('Overpass: no places found');
+  })().catch((e) => {
+    throw new Error(`Overpass: ${(e as Error).message.replace(/^Overpass: /, '')}`);
+  });
+  const nominatim = (async () => {
+    for (const km of [radiusM / 1000, (radiusM * 3) / 1000]) {
+      const places = await fetchNominatimPlaces(center, kind, km, limit);
       if (places.length) return places;
     }
-    return [];
-  })();
+    throw new Error('no places found');
+  })().catch((e) => {
+    throw new Error(`Nominatim: ${(e as Error).message}`);
+  });
+  const request = firstSuccess([overpass, nominatim]);
   placeCache.set(key, request);
   request.catch(() => placeCache.delete(key)); // let a retry try again
   return request;

@@ -1,6 +1,7 @@
 import overpass from './fixtures/overpass-garages.json';
 import osrm from './fixtures/osrm-route.json';
-import { buildOverpassQuery, parseOsrmRoute, parseOverpass, pointAlongPath } from '../src/api/osm';
+import nominatim from './fixtures/nominatim-garages.json';
+import { buildNominatimUrl, buildOverpassQuery, parseNominatim, parseOsrmRoute, parseOverpass, pointAlongPath } from '../src/api/osm';
 
 const CMUQ = { latitude: 25.3155, longitude: 51.439 };
 
@@ -72,10 +73,11 @@ describe('Overpass mirror race', () => {
 
   it('resolves with the first mirror that answers, even if the main server times out', async () => {
     const fetcher = jest.fn((url: string) =>
-      url === OVERPASS_MIRRORS[0] ? Promise.reject(new Error('timed out')) : url === OVERPASS_MIRRORS[1] ? Promise.resolve(ok) : new Promise(() => undefined),
+      url.startsWith(OVERPASS_MIRRORS[0]) ? Promise.reject(new Error('timed out')) : url.startsWith(OVERPASS_MIRRORS[1]) ? Promise.resolve(ok) : new Promise(() => undefined),
     );
     await expect(queryOverpass('q', fetcher)).resolves.toBe(ok);
     expect(fetcher).toHaveBeenCalledTimes(OVERPASS_MIRRORS.length);
+    expect(fetcher.mock.calls[0][0]).toContain('?data=q');
   });
 
   it('fails with a short message only when every mirror fails', async () => {
@@ -84,7 +86,40 @@ describe('Overpass mirror race', () => {
   });
 
   it('ignores mirrors that return an error page instead of JSON elements', async () => {
-    const fetcher = jest.fn((url: string) => Promise.resolve(url === OVERPASS_MIRRORS[2] ? ok : { remark: 'runtime error: too busy' }));
+    const fetcher = jest.fn((url: string) => Promise.resolve(url.startsWith(OVERPASS_MIRRORS[2]) ? ok : { remark: 'runtime error: too busy' }));
     await expect(queryOverpass('q', fetcher)).resolves.toBe(ok);
+  });
+});
+
+describe('Overpass error detail', () => {
+  const { queryOverpass } = require('../src/api/osm');
+  it('names each server and its error when they fail differently', async () => {
+    const fetcher = jest.fn((url: string) => Promise.reject(new Error(url.includes('kumi') ? 'HTTP 429' : 'timed out')));
+    await expect(queryOverpass('q', fetcher)).rejects.toThrow(/overpass\.kumi\.systems: HTTP 429/);
+  });
+});
+
+describe('Nominatim parsing', () => {
+  const places = parseNominatim(nominatim, CMUQ, 'garage');
+
+  it('reads string coordinates and builds OSM ids', () => {
+    expect(places[0]).toMatchObject({ id: 'node/5001', name: 'Education City Auto Service', source: 'nominatim', phone: '+974 4411 2233' });
+    expect(places[0].coords.latitude).toBeCloseTo(25.3171);
+  });
+
+  it('falls back to the first part of display_name and skips bad coordinates', () => {
+    expect(places.map((p) => p.id)).toEqual(['node/5001', 'way/6002']);
+    expect(places[1].name).toBe('Al Gharrafa Road');
+  });
+
+  it('rejects responses that are not an array', () => {
+    expect(() => parseNominatim({ error: 'Too many requests' }, CMUQ, 'garage')).toThrow('not an array');
+  });
+
+  it('searches a bounded box in Qatar around the driver', () => {
+    const url = buildNominatimUrl(CMUQ, 'garage', 5, 5);
+    expect(url).toContain('q=car%20repair');
+    expect(url).toContain('bounded=1');
+    expect(url).toContain('countrycodes=qa');
   });
 });

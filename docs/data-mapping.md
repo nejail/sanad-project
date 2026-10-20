@@ -9,6 +9,7 @@ Structs live in `src/models/types.ts` (app) and `src/models/firestore.ts` (Fireb
 | Source | Type | What it provides | Status |
 |---|---|---|---|
 | Overpass API (`POST https://overpass-api.de/api/interpreter`) | External, JSON | Real garages, tyre shops, fuel stations and car washes near a point | Integrated and parsed |
+| Nominatim search API (`GET https://nominatim.openstreetmap.org/search?format=jsonv2&q=car%20repair&viewbox=...&bounded=1&countrycodes=qa`) | External, JSON | Same businesses as Overpass; queried at the same time and used if it answers first | Integrated and parsed |
 | OSRM route API (`GET https://router.project-osrm.org/route/v1/driving/{lon,lat};{lon,lat}?overview=full&geometries=geojson`) | External, JSON | Road distance, driving time and route geometry | Integrated and parsed |
 | Device location (`expo-location`) | Device API | GPS position, reverse geocoded address | Integrated |
 | AsyncStorage (`sanad:account:{phone}`) | Internal data store | User, cars, addresses, orders as JSON | Integrated |

@@ -1,0 +1,5 @@
+[
+  { "place_id": 1, "osm_type": "node", "osm_id": 5001, "lat": "25.3171", "lon": "51.4405", "category": "shop", "type": "car_repair", "name": "Education City Auto Service", "display_name": "Education City Auto Service, Al Rayyan, Qatar", "extratags": { "phone": "+974 4411 2233" } },
+  { "place_id": 2, "osm_type": "way", "osm_id": 6002, "lat": "25.3050", "lon": "51.4600", "category": "shop", "type": "car_repair", "name": "", "display_name": "Al Gharrafa Road, Al Gharrafa, Qatar", "extratags": null },
+  { "place_id": 3, "osm_type": "node", "osm_id": 7003, "lat": "not-a-number", "lon": "51.4", "name": "Broken" }
+]

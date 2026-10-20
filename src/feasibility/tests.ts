@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { fetchNearbyPlaces, fetchRoute } from '../api/osm';
+import { fetchNominatimPlaces, fetchOverpassPlaces, fetchRoute } from '../api/osm';
 import { LocalOtpService, OTP_TTL_MS } from '../models/otp';
 import { canDial } from '../services/contact';
 import { getCurrentPlace, reverseGeocode, DOHA } from '../services/location';
@@ -110,11 +110,23 @@ export const TESTS: FeasibilityTest[] = [
   {
     id: 'overpass',
     technology: 'Overpass API (OpenStreetMap JSON)',
-    name: 'External API: nearby garages',
+    name: 'External API: nearby garages (Overpass)',
     usedFor: 'Real providers near the driver and tow destinations (Review Order)',
     run: async () => {
       const t = Date.now();
-      const places = await fetchNearbyPlaces(DOHA, 'garage', 5000, 5);
+      const places = await fetchOverpassPlaces(DOHA, 'garage', 5000, 5);
+      if (!places.length) throw new Error('Request worked but no garages were returned');
+      return `${places.length} garages parsed in ${Date.now() - t} ms; nearest "${places[0].name}" ${places[0].distanceKm} km`;
+    },
+  },
+  {
+    id: 'nominatim',
+    technology: 'Nominatim search API (OpenStreetMap JSON)',
+    name: 'External API: nearby garages (Nominatim)',
+    usedFor: 'Second source for providers when Overpass is slow (Review Order)',
+    run: async () => {
+      const t = Date.now();
+      const places = await fetchNominatimPlaces(DOHA, 'garage', 5, 5);
       if (!places.length) throw new Error('Request worked but no garages were returned');
       return `${places.length} garages parsed in ${Date.now() - t} ms; nearest "${places[0].name}" ${places[0].distanceKm} km`;
     },
