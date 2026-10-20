@@ -104,7 +104,8 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
 
       {service.pricing === 'towing' && optionId === 'towing' ? (
         <>
-          <SectionLabel>Distance to garage</SectionLabel>
+          <SectionLabel>Estimated distance to garage</SectionLabel>
+          <Text style={font.small}>You can pick the exact garage on the review screen; the price then uses the real road distance.</Text>
           <View style={styles.chips}>
             {TOW_KM.map((k) => <Chip key={k} label={`${k} km`} selected={draft.distanceKm === k} onPress={() => updateDraft({ distanceKm: k })} />)}
           </View>

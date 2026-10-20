@@ -172,7 +172,15 @@ function useAppModel() {
       photoUri: d.photoUri,
       status: 'confirmed',
       createdAt: new Date().toISOString(),
-      provider: { name: 'Ahmed Al-Mansouri', rating: 4.9, vehicle: 'Toyota Camry', phone: '+97455550123' },
+      towTo: d.serviceId === 'emergency' && d.optionId === 'towing' ? d.towTo : undefined,
+      provider: {
+        name: 'Ahmed Al-Mansouri',
+        rating: 4.9,
+        vehicle: d.serviceId === 'emergency' ? 'Flatbed tow truck' : 'Toyota Hilux service van',
+        phone: d.providerBase?.phone ?? '+97455550123',
+        base: d.providerBase ? { id: d.providerBase.id, name: d.providerBase.name, coords: d.providerBase.coords, phone: d.providerBase.phone } : undefined,
+        etaMin: d.providerBase?.etaMin,
+      },
     };
     dispatch({ type: 'account', update: (acc) => ({ ...acc, orders: [order, ...acc.orders] }) });
     return order;

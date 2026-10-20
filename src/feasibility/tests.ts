@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
+import { fetchNearbyPlaces, fetchRoute } from '../api/osm';
 import { LocalOtpService, OTP_TTL_MS } from '../models/otp';
 import { canDial } from '../services/contact';
 import { getCurrentPlace, reverseGeocode, DOHA } from '../services/location';
@@ -104,6 +105,29 @@ export const TESTS: FeasibilityTest[] = [
       const res = await fetch('https://www.google.com/generate_204', { method: 'GET' });
       if (res.status >= 400) throw new Error(`HTTP ${res.status}`);
       return `HTTP ${res.status} in ${Date.now() - t} ms`;
+    },
+  },
+  {
+    id: 'overpass',
+    technology: 'Overpass API (OpenStreetMap JSON)',
+    name: 'External API: nearby garages',
+    usedFor: 'Real providers near the driver and tow destinations (Review Order)',
+    run: async () => {
+      const t = Date.now();
+      const places = await fetchNearbyPlaces(DOHA, 'garage', 5000, 5);
+      if (!places.length) throw new Error('Request worked but no garages were returned');
+      return `${places.length} garages parsed in ${Date.now() - t} ms; nearest "${places[0].name}" ${places[0].distanceKm} km`;
+    },
+  },
+  {
+    id: 'osrm',
+    technology: 'OSRM route API (JSON)',
+    name: 'External API: road distance and ETA',
+    usedFor: 'Towing price by road distance, provider ETA and route on Track Order',
+    run: async () => {
+      const t = Date.now();
+      const r = await fetchRoute({ latitude: 25.2847, longitude: 51.4973 }, { latitude: 25.3155, longitude: 51.439 });
+      return `Al Sadd to Education City: ${r.distanceKm} km, ${r.durationMin} min, ${r.path.length} route points, parsed in ${Date.now() - t} ms`;
     },
   },
   {

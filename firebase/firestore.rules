@@ -1,0 +1,44 @@
+rules_version = '2';
+// Draft security rules for SANAD's Firestore structure (see src/models/firestore.ts).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isUser(uid) { return signedIn() && request.auth.uid == uid; }
+    function isProvider() { return signedIn() && exists(/databases/$(database)/documents/providers/$(request.auth.uid)); }
+
+    // Customers own their profile, cars and addresses.
+    match /users/{uid} {
+      allow read, write: if isUser(uid);
+      match /cars/{carId} { allow read, write: if isUser(uid); }
+      match /addresses/{addressId} { allow read, write: if isUser(uid); }
+    }
+
+    // Catalogue is public to signed-in users, edited only from the admin console.
+    match /services/{serviceId} { allow read: if signedIn(); allow write: if false; }
+
+    // Providers are readable by signed-in users; each provider edits only their own document.
+    match /providers/{providerId} {
+      allow read: if signedIn();
+      allow update: if isUser(providerId);
+    }
+
+    // Orders: customer creates and reads their own; the assigned provider reads and updates status.
+    match /orders/{orderId} {
+      allow create: if signedIn() && request.resource.data.customerId == request.auth.uid;
+      allow read: if signedIn() && (resource.data.customerId == request.auth.uid || resource.data.providerId == request.auth.uid);
+      allow update: if signedIn() && (resource.data.customerId == request.auth.uid || resource.data.providerId == request.auth.uid);
+
+      // Live location is written by the assigned provider and read by the customer.
+      match /tracking/{doc} {
+        allow read: if signedIn() && (get(/databases/$(database)/documents/orders/$(orderId)).data.customerId == request.auth.uid
+                                   || get(/databases/$(database)/documents/orders/$(orderId)).data.providerId == request.auth.uid);
+        allow write: if signedIn() && get(/databases/$(database)/documents/orders/$(orderId)).data.providerId == request.auth.uid;
+      }
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.customerId == request.auth.uid;
+    }
+  }
+}

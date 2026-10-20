@@ -3,6 +3,7 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { MapPreview } from '../../components/MapPreview';
 import { Badge, Banner, Card, PrimaryButton, Screen } from '../../components/ui';
+import { Route, fetchRoute, pointAlongPath } from '../../api/osm';
 import { distanceKm, etaMinutes, formatQAR } from '../../models/pricing';
 import { STATUS_STEPS, interpolate, providerStart, simulatedStatus, statusIndex } from '../../models/tracking';
 import { OrderStatus } from '../../models/types';
@@ -24,7 +25,24 @@ export default function TrackOrderView({ navigation, route }: ScreenProps<'Track
   const finished = order?.status === 'done' || order?.status === 'cancelled';
 
   const dest = order?.address.coords;
-  const start = useMemo(() => (dest ? providerStart(dest) : undefined), [dest?.latitude, dest?.longitude]);
+  // Provider starts at their real business (from Overpass) when known, otherwise ~3 km away.
+  const start = useMemo(
+    () => order?.provider.base?.coords ?? (dest ? providerStart(dest) : undefined),
+    [dest?.latitude, dest?.longitude, order?.provider.base?.id],
+  );
+
+  // Real road route from the provider to the customer (OSRM); falls back to a straight line.
+  const [road, setRoad] = useState<Route | null>(null);
+  useEffect(() => {
+    if (!start || !dest || finished) return;
+    let cancelled = false;
+    fetchRoute(start, dest)
+      .then((r) => !cancelled && r.path.length > 1 && setRoad(r))
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [start?.latitude, start?.longitude, dest?.latitude, dest?.longitude]);
 
   // Resume the simulation from the order's saved status (e.g. the demo order is already on the way).
   const offset = useRef(order?.status === 'arrived' ? TRAVEL_MS + 5000 : order?.status === 'on_the_way' ? 5000 : 0).current;
@@ -39,9 +57,16 @@ export default function TrackOrderView({ navigation, route }: ScreenProps<'Track
 
   const sim = simulatedStatus(elapsed, TRAVEL_MS);
   const status: OrderStatus = finished ? order!.status : sim.status;
-  const providerPos = start && dest ? interpolate(start, dest, finished ? 1 : sim.progress) : undefined;
+  const progress = finished ? 1 : sim.progress;
+  const providerPos = road ? pointAlongPath(road.path, progress) : start && dest ? interpolate(start, dest, progress) : undefined;
   const remainingKm = providerPos && dest ? distanceKm(providerPos, dest) : 0;
-  const eta = status === 'arrived' || status === 'done' ? 0 : etaMinutes(remainingKm);
+  const eta =
+    status === 'arrived' || status === 'done'
+      ? 0
+      : road
+        ? Math.max(1, Math.round(road.durationMin * (1 - progress)))
+        : etaMinutes(remainingKm);
+  const remainingPath = road ? road.path.slice(Math.floor((road.path.length - 1) * progress)) : undefined;
 
   useEffect(() => {
     if (!order || finished || status === order.status) return;
@@ -79,13 +104,15 @@ export default function TrackOrderView({ navigation, route }: ScreenProps<'Track
         </>
       }
     >
-      <MapPreview center={dest} provider={status === 'done' ? undefined : providerPos} route={providerPos ? [providerPos, dest] : undefined} height={240} interactive={false} />
+      <MapPreview center={dest} provider={status === 'done' ? undefined : providerPos} route={providerPos ? (remainingPath ? [providerPos, ...remainingPath] : [providerPos, dest]) : undefined} height={240} interactive={false} />
       <View style={styles.head}>
         <View style={{ flex: 1 }}>
           <Text style={[font.h2, { fontSize: 19 }]}>
             {status === 'confirmed' ? 'Finding your technician' : status === 'on_the_way' ? 'Driver on the way' : status === 'arrived' ? 'Driver has arrived' : 'Job completed'}
           </Text>
           <Text style={font.small}>{order.title} · {order.address.label}</Text>
+          {order.provider.base ? <Text style={font.small} numberOfLines={1}>From {order.provider.base.name}{road ? ` · ${road.distanceKm} km by road` : ''}</Text> : null}
+          {order.towTo ? <Text style={font.small} numberOfLines={1}>Towing to {order.towTo.name} ({order.towTo.distanceKm} km)</Text> : null}
         </View>
         {status === 'on_the_way' || status === 'confirmed' ? (
           <View style={{ alignItems: 'flex-end' }}>
@@ -119,7 +146,7 @@ export default function TrackOrderView({ navigation, route }: ScreenProps<'Track
         <Text style={font.small}>Order #{order.id} · {formatQAR(order.quote.total)} · {order.payment === 'cash' ? 'Cash' : 'Card'}</Text>
         {status === 'done' ? <Badge label="Done" tone="success" /> : null}
       </View>
-      {!finished ? <Banner text="Prototype: the provider's position is simulated so the full journey takes under a minute." /> : null}
+      {!finished ? <Banner text={`Prototype: the provider's movement is sped up so the trip takes under a minute${road ? '; the path follows the real road route' : ''}.`} /> : null}
     </Screen>
   );
 }

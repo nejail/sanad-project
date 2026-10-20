@@ -1,0 +1,17 @@
+{
+  "code": "Ok",
+  "waypoints": [
+    { "name": "Al Sadd Street", "location": [51.4973, 25.2847], "distance": 3.1 },
+    { "name": "Education City", "location": [51.439, 25.3155], "distance": 5.4 }
+  ],
+  "routes": [
+    {
+      "distance": 8432.7,
+      "duration": 701.4,
+      "weight": 701.4,
+      "weight_name": "routability",
+      "geometry": { "type": "LineString", "coordinates": [[51.4973, 25.2847], [51.48, 25.29], [51.46, 25.30], [51.439, 25.3155]] },
+      "legs": [{ "distance": 8432.7, "duration": 701.4, "summary": "", "steps": [] }]
+    }
+  ]
+}

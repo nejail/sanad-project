@@ -1,0 +1,12 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API",
+  "osm3s": { "timestamp_osm_base": "2026-10-19T08:00:00Z", "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL." },
+  "elements": [
+    { "type": "node", "id": 1001, "lat": 25.3201, "lon": 51.4402, "tags": { "shop": "car_repair", "name": "Al Rayyan Auto Care", "phone": "+974 4400 1234", "opening_hours": "Sa-Th 07:00-21:00" } },
+    { "type": "way", "id": 2002, "center": { "lat": 25.3010, "lon": 51.4550 }, "tags": { "shop": "car_repair", "name:en": "Gharrafa Garage", "name": "كراج الغرافة" } },
+    { "type": "node", "id": 1003, "lat": 25.3160, "lon": 51.4392, "tags": { "shop": "car_repair" } },
+    { "type": "node", "id": 1001, "lat": 25.3201, "lon": 51.4402, "tags": { "shop": "car_repair", "name": "Al Rayyan Auto Care" } },
+    { "type": "relation", "id": 3003, "tags": { "shop": "car_repair", "name": "No coordinates" } }
+  ]
+}

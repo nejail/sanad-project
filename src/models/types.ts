@@ -83,11 +83,21 @@ export interface Quote {
 
 export type OrderStatus = 'confirmed' | 'on_the_way' | 'arrived' | 'done' | 'cancelled';
 
-export interface Provider {
+/** A real place (from the Overpass API) stored on orders: the provider's base or a tow destination. */
+export interface PlaceRef {
+  id: string;
   name: string;
+  coords: Coordinates;
+  phone?: string;
+}
+
+export interface Provider {
+  name: string; // technician / driver
   rating: number;
   vehicle: string;
   phone: string;
+  base?: PlaceRef; // business the technician is dispatched from
+  etaMin?: number; // driving time from OSRM when the order was placed
 }
 
 export interface Order {
@@ -104,6 +114,7 @@ export interface Order {
   notes?: string;
   photoUri?: string;
   promoApplied?: boolean;
+  towTo?: PlaceRef & { distanceKm: number };
   status: OrderStatus;
   createdAt: string;
   provider: Provider;
@@ -122,4 +133,6 @@ export interface BookingDraft {
   schedule?: Schedule;
   payment: 'cash' | 'card';
   promo?: string;
+  providerBase?: PlaceRef & { etaMin?: number };
+  towTo?: PlaceRef & { distanceKm: number };
 }

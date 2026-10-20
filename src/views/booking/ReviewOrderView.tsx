@@ -1,14 +1,16 @@
-import React, { useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Card, OptionRow, PriceSummary, PrimaryButton, Row, Screen, SectionLabel } from '../../components/ui';
+import { Banner, Card, IconTile, OptionRow, PriceSummary, PrimaryButton, Radio, Row, Screen, SectionLabel } from '../../components/ui';
+import { SERVICE_PLACE_KIND } from '../../api/osm';
 import { getOption, getService } from '../../models/catalog';
 import { buildQuote, isFirstWashFree } from '../../models/pricing';
 import { ScreenProps } from '../../navigation/types';
 import { useAccount, useApp } from '../../viewModels/AppContext';
-import { colors } from '../../theme';
+import { useNearbyPlaces } from '../../viewModels/useNearbyPlaces';
+import { colors, font } from '../../theme';
 
-/** 09 Review Order */
+/** 09 Review Order. Also shows the nearest real provider (Overpass + OSRM) and, for towing, real garages to tow to. */
 export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder'>) {
   const { draft, updateDraft, placeOrder } = useApp();
   const { cars, orders } = useAccount();
@@ -21,6 +23,35 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
   const service = getService(serviceId);
   const option = getOption(serviceId, optionId);
   const car = cars.find((c) => c.id === draft.carId);
+  const towing = serviceId === 'emergency' && optionId === 'towing';
+  const center = draft.address?.coords;
+
+  // Nearest business that can do this service, with driving time to the customer.
+  const providers = useNearbyPlaces(center, SERVICE_PLACE_KIND[serviceId], { limit: 3, withRoutes: 1, direction: 'toCustomer' });
+  // For towing: the closest garages, with the real driving distance from the customer.
+  const garages = useNearbyPlaces(center, 'garage', { limit: 3, withRoutes: 3, direction: 'fromCustomer', enabled: towing });
+
+  const nearest = providers.places[0];
+  useEffect(() => {
+    if (nearest) {
+      updateDraft({
+        providerBase: { id: nearest.id, name: nearest.name, coords: nearest.coords, phone: nearest.phone, etaMin: nearest.route?.durationMin },
+      });
+    }
+  }, [nearest?.id, nearest?.route?.durationMin]);
+
+  useEffect(() => {
+    const first = garages.places.find((g) => g.route);
+    if (towing && first && !draft.towTo) chooseGarage(first.id);
+  }, [garages.places.length]);
+
+  function chooseGarage(id: string) {
+    const g = garages.places.find((x) => x.id === id);
+    if (!g) return;
+    const km = g.route?.distanceKm ?? g.distanceKm;
+    updateDraft({ towTo: { id: g.id, name: g.name, coords: g.coords, phone: g.phone, distanceKm: km }, distanceKm: km });
+  }
+
   const quote = useMemo(
     () => buildQuote({ serviceId, optionId, addOnIds: draft.addOnIds, litres: draft.litres, distanceKm: draft.distanceKm, firstWashFree }),
     [serviceId, optionId, draft.addOnIds, draft.litres, draft.distanceKm, firstWashFree],
@@ -48,6 +79,50 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
         <Row label="Schedule" value={when} />
         {draft.photoUri ? <Row label="Photo" value="Attached" /> : null}
       </Card>
+
+      <SectionLabel>Nearest provider</SectionLabel>
+      {providers.loading ? (
+        <Loading text="Finding providers near you…" />
+      ) : nearest ? (
+        <Card style={styles.row} testID="nearest-provider">
+          <IconTile name="business-outline" />
+          <View style={{ flex: 1 }}>
+            <Text style={[font.h3, { fontSize: 15 }]} numberOfLines={1}>{nearest.name}</Text>
+            <Text style={font.small}>
+              {nearest.route ? `${nearest.route.distanceKm} km away by road · about ${nearest.route.durationMin} min` : `${nearest.distanceKm} km away`}
+            </Text>
+          </View>
+        </Card>
+      ) : (
+        <Banner
+          tone={providers.error ? 'danger' : 'info'}
+          text={providers.error ? `Live map data unavailable (${providers.error}). A provider will be assigned after you order.` : 'No providers found nearby. One will be assigned after you order.'}
+        />
+      )}
+
+      {towing ? (
+        <>
+          <SectionLabel>Tow to</SectionLabel>
+          {garages.loading ? <Loading text="Finding garages and road distances…" /> : null}
+          {garages.places.map((g) => {
+            const km = g.route?.distanceKm ?? g.distanceKm;
+            return (
+              <Card key={g.id} selected={draft.towTo?.id === g.id} onPress={() => chooseGarage(g.id)} style={styles.row} testID="tow-garage">
+                <IconTile name="construct-outline" />
+                <View style={{ flex: 1 }}>
+                  <Text style={[font.h3, { fontSize: 15 }]} numberOfLines={1}>{g.name}</Text>
+                  <Text style={font.small}>{km} km {g.route ? `by road · ${g.route.durationMin} min` : '(straight line)'}</Text>
+                </View>
+                <Radio selected={draft.towTo?.id === g.id} />
+              </Card>
+            );
+          })}
+          {!garages.loading && garages.places.length === 0 ? (
+            <Banner tone="danger" text={`Could not load garages${garages.error ? ` (${garages.error})` : ''}. The estimate uses the distance you chose earlier.`} />
+          ) : null}
+        </>
+      ) : null}
+
       <PriceSummary quote={quote} />
       <SectionLabel>Payment</SectionLabel>
       <OptionRow icon="cash-outline" title="Cash on Service" subtitle="Pay when the technician arrives" selected={draft.payment === 'cash'} onPress={() => updateDraft({ payment: 'cash' })} />
@@ -63,6 +138,16 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
   );
 }
 
+function Loading({ text }: { text: string }) {
+  return (
+    <View style={[styles.row, { paddingVertical: 8 }]}>
+      <ActivityIndicator size="small" color={colors.primary} />
+      <Text style={font.small}>{text}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   promo: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 48, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 12 },
 });

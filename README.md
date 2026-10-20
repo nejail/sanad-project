@@ -22,7 +22,7 @@ The project uses **Expo SDK 57** (React Native 0.86), the same SDK as the course
 Other commands:
 
 ```bash
-npm test            # 27 unit tests (pricing, OTP rules, validation, tracking)
+npm test            # 44 unit tests (pricing, OTP rules, validation, tracking, API JSON parsing, Firestore mapping)
 npm run typecheck   # TypeScript strict mode
 npx expo start --web  # browser preview (maps, secure store, haptics are stubbed)
 ```
@@ -36,10 +36,11 @@ npx expo start --web  # browser preview (maps, secure store, haptics are stubbed
 | 3 | Enter the 6-digit code shown in the notification | Returning user lands on **Home with registered cars loaded** |
 | 4 | Tap any service, e.g. **Emergency 24/7 > Towing** | Options, price breakdown with 5% VAT, optional photo |
 | 5 | Select Vehicle > Location > **Use My Current Location** | Live GPS, reverse geocoded address, real map |
-| 6 | Schedule > Review Order > Place Order > Track Order | Simulated provider drives towards you, status and ETA update, notifications fire |
-| 7 | Close and reopen the app | Session is restored from secure storage, no second sign in |
-| 8 | Profile > Logout, then sign in with any other number (e.g. 6655 4433) | No account found > add name > **Add Your First Car** > Home |
-| 9 | Profile > **Technology Feasibility Tests** > Run Automatic Tests > Share Results | Pass/fail, timing and device details for each technology |
+| 6 | Schedule > Review Order | Nearest real garage (Overpass API) with road distance and ETA (OSRM API); for towing, pick the garage to tow to and the price uses the road distance |
+| 7 | Place Order > Track Order | Provider drives towards you along the real road route, status and ETA update, notifications fire |
+| 8 | Close and reopen the app | Session is restored from secure storage, no second sign in |
+| 9 | Profile > Logout, then sign in with any other number (e.g. 6655 4433) | No account found > add name > **Add Your First Car** > Home |
+| 10 | Profile > **Technology Feasibility Tests** > Run Automatic Tests > Share Results | Pass/fail, timing and device details for each technology |
 
 Wrong codes show the attempts left; codes expire after 5 minutes; resend is available after 30 seconds.
 
@@ -59,8 +60,11 @@ Splash, Sign In, Register, Verify OTP, Add First Car, Home, six service screens 
 | Cars, addresses, orders offline | `@react-native-async-storage/async-storage` | Yes | Real | Cache of backend data |
 | Secure sign in | OTP rules in `src/models/otp.ts` | n/a | Simulated: code generated on device | Server-side OTP (e.g. Twilio Verify or Supabase phone auth) so the code never exists on the phone |
 | Contact provider / SOS | `Linking` (`tel:`, WhatsApp link) | Yes | Real | Masked numbers through a calling provider |
+| Nearby providers and garages | Overpass API (OpenStreetMap JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts` | Self-hosted Overpass or Google Places |
+| Road distance, ETA, route | OSRM route API (JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts` | Self-hosted OSRM or Google Routes |
+| Backend data | Cloud Firestore (structure in `src/models/firestore.ts`, rules in `firebase/firestore.rules`) | Needs dev build | Structure and converters defined | Next sprint |
 | Navigation | React Navigation (native stack + bottom tabs) | Yes | Real | Same |
-| Provider matching and live tracking | none yet | n/a | Simulated movement on the map | Backend with provider app sending live locations |
+| Provider matching and live tracking | Overpass + OSRM | n/a | Real nearest business and road route; movement sped up | `orders/{id}/tracking/live` written by the provider app |
 
 ## Project structure (MVVM, like the course labs)
 
@@ -71,12 +75,17 @@ src/services/                device APIs: location, notifications, media, secure
 src/viewModels/AppContext.tsx  app state (auth, account, booking draft) and actions
 src/views/                   screens (auth, home, booking, orders, cars, profile)
 src/components/              shared UI (buttons, cards, option rows, map, logo)
+src/api/osm.ts               external APIs (Overpass, OSRM) and JSON parsing
+src/models/firestore.ts      Firebase structure and converters
 src/feasibility/tests.ts     the in-app technology tests
+firebase/firestore.rules     draft security rules
+docs/                        data mapping, feasibility results, user test plan, feature schedule
 __tests__/                   Jest unit tests
 ```
 
 ## Known limitations
 
-- No backend: data lives on the device, providers and their movement are simulated, and the OTP is generated locally.
+- No backend yet: data lives on the device, the technician and their speed are simulated (their starting business and road route are real), and the OTP is generated locally.
+- The public Overpass and OSRM servers are for light use; the app falls back to estimates when they are unreachable.
 - Card payment and promo codes are placeholders.
 - The browser preview cannot show maps, secure storage, haptics or reverse geocoding; use a phone or simulator.
