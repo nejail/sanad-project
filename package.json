@@ -53,7 +53,8 @@
     "typecheck": "tsc --noEmit",
     "ios:device": "expo run:ios --device",
     "ios:sim": "expo run:ios",
-    "prebuild": "expo prebuild --clean",
+    "prebuild": "expo prebuild --clean --platform ios",
+    "prebuild:android": "expo prebuild --clean --platform android",
     "go": "expo start --go",
     "seed:services": "tsx scripts/seed-services.ts"
   },

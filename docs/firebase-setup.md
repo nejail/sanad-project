@@ -60,5 +60,6 @@ After the first install you only need `npx expo start` and the development build
 | `RNFBAppModule not found` | You opened the app in Expo Go or an old build. Run `npm run prebuild` and `npm run ios:device` again. |
 | "Phone sign-in is not enabled" | Enable the Phone provider (step 1.5). |
 | "SMS limit reached for today" | The free plan allows 10 SMS a day. Use the test number, or add billing (see above). |
+| `Path to google-services.json is not defined` | Android was prebuilt without its Firebase file. `npm run prebuild` only builds iOS; for Android, add `google-services.json` (step 1.4) and run `npm run prebuild:android`. |
 | Build fails after adding the plist | `npm run prebuild` (it uses `--clean`) and build again. |
 | App opens Expo Go instead of the build | Use `npx expo start` (development build) or `npm run go` (Expo Go) explicitly. |
