@@ -80,7 +80,7 @@ describe('firebaseAuthMessage', () => {
     ['auth/too-many-requests', 'Too many attempts'],
     ['auth/network-request-failed', 'No internet'],
     ['auth/operation-not-allowed', 'not enabled'],
-    ['auth/billing-not-enabled', 'Blaze'],
+    ['auth/billing-not-enabled', 'billing'],
   ])('%s', (code, text) => {
     expect(firebaseAuthMessage({ code })).toContain(text);
   });

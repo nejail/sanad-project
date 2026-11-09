@@ -58,7 +58,7 @@ Splash, Sign In, Register, Verify OTP, Add First Car, Home, six service screens 
 | Order and OTP alerts | `expo-notifications` (local) | Yes | Real local notifications | Remote push needs a development build, APNs/FCM and a push server |
 | Keep the user signed in | `expo-secure-store` | Yes | Real (Keychain / Keystore) | Store a server-issued session token |
 | Cars, addresses, orders offline | `@react-native-async-storage/async-storage` | Yes | Real | Cache of backend data |
-| Secure sign in | Firebase Authentication (phone) via React Native Firebase, `src/services/auth.ts` | Needs dev build | Real SMS in the development build; prototype OTP rules (`src/models/otp.ts`) as the Expo Go fallback | Same; Blaze plan for real SMS at scale |
+| Secure sign in | Firebase Authentication (phone) via React Native Firebase, `src/services/auth.ts` | Needs dev build | Real SMS in the development build; prototype OTP rules (`src/models/otp.ts`) as the Expo Go fallback | Same; free plan allows 10 SMS a day, billing raises it |
 | Contact provider / SOS | `Linking` (`tel:`, WhatsApp link) | Yes | Real | Masked numbers through a calling provider |
 | Nearby providers and garages | Nominatim search API, with Overpass asked in parallel (OpenStreetMap JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts`; Nominatim answers on device, Overpass timed out from Qatar | Self-hosted service or Google Places |
 | Road distance, ETA, route | OSRM route API (JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts` | Self-hosted OSRM or Google Routes |

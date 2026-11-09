@@ -13,7 +13,7 @@ Use a **new project for SANAD**, not a lab project, so its data, security rules 
 
 1. Go to <https://console.firebase.google.com>, click **Create a project**, name it `SANAD`. Google Analytics is not needed.
 2. **Add app > iOS**. Bundle ID: `qa.cmu.sanad.prototype` (must match `app.json`). App nickname: `SANAD iOS`. Skip the remaining steps in the wizard.
-3. Download **GoogleService-Info.plist** and put it in the project root, next to `package.json`.
+3. Download **GoogleService-Info.plist** and put it in the project root, next to `package.json`. Skip the wizard's "Add Firebase SDK" and "Add initialization code" steps: the Expo config plugins add the SDK and the setup code when you run `npm run prebuild`.
 4. Optional, for Android: **Add app > Android**, package `qa.cmu.sanad.prototype`, download **google-services.json** into the project root.
 5. **Build > Authentication > Get started > Sign-in method > Phone > Enable**.
 6. Under **Phone numbers for testing**, add `+974 5012 3456` with code `123456` (the demo account). Test numbers never send an SMS and have no cost.
@@ -21,9 +21,9 @@ Use a **new project for SANAD**, not a lab project, so its data, security rules 
 
 The two config files are **not committed** (the repo is public). Share them with the team privately, for example in the team chat.
 
-### Real SMS and billing
+### Real SMS limits
 
-Firebase sends real SMS only on the **Blaze (pay as you go)** plan. The test number above works without real SMS. If the team wants real SMS for the demo, upgrade to Blaze and set a small **budget alert** (for example 5 USD) in Google Cloud Billing first. Each SMS to Qatar is charged per message.
+New Firebase projects on the free plan can send **10 real SMS per day** (shown on Authentication > Sign-in method). That is enough for testing; use the test number for repeated demos so the quota is not used up. Adding a billing account (Blaze plan) raises the limit, and each SMS is then charged; set a small **budget alert** first if you do.
 
 ## 2. Build and install on an iPhone with a free Apple ID
 
@@ -59,6 +59,6 @@ After the first install you only need `npx expo start` and the development build
 |---|---|
 | `RNFBAppModule not found` | You opened the app in Expo Go or an old build. Run `npm run prebuild` and `npm run ios:device` again. |
 | "Phone sign-in is not enabled" | Enable the Phone provider (step 1.5). |
-| "Real SMS needs the Firebase Blaze plan" | Use the test number or upgrade to Blaze (see above). |
+| "SMS limit reached for today" | The free plan allows 10 SMS a day. Use the test number, or add billing (see above). |
 | Build fails after adding the plist | `npm run prebuild` (it uses `--clean`) and build again. |
 | App opens Expo Go instead of the build | Use `npx expo start` (development build) or `npm run go` (Expo Go) explicitly. |

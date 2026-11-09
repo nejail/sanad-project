@@ -61,7 +61,7 @@ export function firebaseAuthMessage(error: unknown): string {
     case 'auth/operation-not-allowed':
       return 'Phone sign-in is not enabled for this app yet (Firebase console > Authentication > Sign-in method).';
     case 'auth/billing-not-enabled':
-      return 'Real SMS needs the Firebase Blaze plan. Use a test number or enable billing.';
+      return 'SMS sending needs billing enabled on the Firebase project. Use a test number for now.';
     case 'auth/missing-client-identifier':
     case 'auth/captcha-check-failed':
       return 'Verification was cancelled. Try again and finish the check that opens.';
