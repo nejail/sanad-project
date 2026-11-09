@@ -50,7 +50,8 @@
           "cameraPermission": "SANAD lets you take a photo of your car so the provider knows what to expect."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "expo-status-bar"
     ]
   }
 }

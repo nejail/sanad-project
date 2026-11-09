@@ -8,7 +8,7 @@ The screens follow the revised high-fidelity Figma file. Sprint 4 adds real SMS 
 
 ## Run it
 
-Requirements: Node 20+, a Mac with Xcode for the development build, and an iPhone or the iOS Simulator. The project uses **Expo SDK 57** (React Native 0.86).
+Requirements: Node 20+, a Mac with Xcode for the development build, and an iPhone or the iOS Simulator. The project uses **Expo SDK 58** (React Native 0.88), the version the current Expo Go app supports.
 
 | Mode | Command | Sign-in |
 |---|---|---|

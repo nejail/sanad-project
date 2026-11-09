@@ -15,7 +15,7 @@ You are helping me (Hassan Al-Qassabi, Andrew ID haq) deliver my Sprint 4 featur
 
 ## Project facts (do not change these)
 
-- Expo **SDK 57** (our phones' Expo Go only supports 57). Use `npx expo install` for any Expo package.
+- Expo **SDK 58** (Expo Go on iPhone only runs the latest SDK). Use `npx expo install` for any Expo package.
 - TypeScript strict, MVVM like the course labs: `src/models`, `src/services`, `src/viewModels`, `src/views`. Comment every function.
 - React Native Firebase **27.1.0** is already installed: `@react-native-firebase/app`, `@react-native-firebase/auth`, `@react-native-firebase/firestore`. Use the **modular API** (`getFirestore`, `doc`, `getDoc`, `setDoc`, `collection`, `onSnapshot`, ...) from `@react-native-firebase/firestore`. Do **not** add the `firebase` web SDK: auth state must come from React Native Firebase so security rules see `request.auth`.
 - Nasser already built phone sign-in (`src/services/auth.ts`). After sign-in, `useApp().uid` is the Firebase user id and `useApp().authMode` is `'firebase'` in the development build or `'local'` in Expo Go.
