@@ -40,6 +40,15 @@ export interface PhoneAuthProvider {
 export const toE164 = (phone: string) => `+974${phone}`;
 export const fromE164 = (phone: string) => phone.replace(/^\+974/, '');
 
+/**
+ * True when `phone` (8 digits, as typed on screen) is the number Firebase verified for `user`.
+ * Stops a user who verified one number from registering or signing in as a different one.
+ * A user without a phone (local mode, or not signed in) never matches.
+ */
+export function isVerifiedNumber(user: AuthUser | null, phone: string): boolean {
+  return !!user?.phone && user.phone === phone;
+}
+
 /** Turns Firebase Auth error codes into messages a driver can act on. */
 export function firebaseAuthMessage(error: unknown): string {
   const code = (error as { code?: string })?.code ?? '';

@@ -3,7 +3,7 @@ import { orderTitle } from '../models/catalog';
 import { buildQuote, isFirstWashFree } from '../models/pricing';
 import { DEMO_ADDRESSES, DEMO_CARS, DEMO_ORDERS, DEMO_PHONE, DEMO_USER } from '../models/seed';
 import { Address, BookingDraft, Car, Order, OrderStatus, ServiceId } from '../models/types';
-import { getPhoneAuth } from '../services/auth';
+import { getPhoneAuth, isVerifiedNumber } from '../services/auth';
 import { CatalogSource, loadCatalog } from '../services/catalogRepo';
 import { FirestoreRepo, RemoteAccount, firestoreMessage, getFirestoreApi, sameRemote } from '../services/firestoreRepo';
 import { clearSession, createSession, readSession } from '../services/session';
@@ -84,6 +84,15 @@ function useAppModel() {
   const catalogLoaded = useRef(false);
   // Short message shown when saving to Firestore fails (see SyncToast).
   const [syncError, setSyncError] = useState<string | null>(null);
+  // Stops the live Firestore listeners; called before signing out so they are not rejected.
+  const stopListening = useRef<(() => void) | null>(null);
+
+  /** Firebase mode: the number typed on screen must be the one Firebase verified for this user. */
+  const checkVerified = useCallback((phone: string) => {
+    if (repo && !isVerifiedNumber(getPhoneAuth().currentUser(), phone)) {
+      throw new Error('This is not the number you verified. Go back and verify this number first.');
+    }
+  }, [repo]);
 
   /**
    * Loads the account for a signed-in user.
@@ -206,15 +215,22 @@ function useAppModel() {
   // Live updates: cars and addresses added or removed on another device appear here too.
   useEffect(() => {
     if (!repo || !isFirebaseUid(authUid) || state.status !== 'signedIn') return;
-    return repo.listenAccount(
+    const stop = repo.listenAccount(
       authUid,
       (remote) => {
-        if (!remote) return; // profile removed in the console: keep what is on screen
+        if (!remote || uidRef.current !== authUid) return; // profile removed in the console, or signed out: keep the screen as is
         remoteRef.current = remote;
         dispatch({ type: 'remote', remote });
       },
-      (e) => setSyncError(firestoreMessage(e)),
+      (e) => {
+        if (uidRef.current === authUid) setSyncError(firestoreMessage(e)); // errors after sign out are expected
+      },
     );
+    stopListening.current = stop;
+    return () => {
+      stop();
+      if (stopListening.current === stop) stopListening.current = null;
+    };
   }, [repo, authUid, state.status]);
 
   /**
@@ -226,22 +242,25 @@ function useAppModel() {
   const accountExists = useCallback(async (phone: string) => {
     if (!repo) return (await findAccount(phone)) !== null;
     const user = getPhoneAuth().currentUser();
-    if (!user) return false;
+    // Before the code is confirmed (or if a different number was verified) we cannot look it up.
+    if (!user || !isVerifiedNumber(user, phone)) return false;
     return (await loadAccountFor(phone, user.uid)) !== null;
   }, [repo, loadAccountFor]);
 
   /** Called after a successful OTP check for an existing user. `userId` comes from the auth provider. */
   const signIn = useCallback(async (phone: string, userId: string = `local:${phone}`) => {
+    checkVerified(phone);
     const account = await loadAccountFor(phone, userId);
     if (!account) throw new Error('No account for this number');
     await createSession(phone);
     await ensureCatalog();
     enter(account, userId);
     return account;
-  }, [loadAccountFor, ensureCatalog, enter]);
+  }, [checkVerified, loadAccountFor, ensureCatalog, enter]);
 
   /** Called after a successful OTP check for a new user. New users start with no cars. */
   const register = useCallback(async (phone: string, name: string, userId: string = `local:${phone}`) => {
+    checkVerified(phone);
     // Firebase mode: if this number already has a profile, sign in to it instead of overwriting it.
     const existing = repo && isFirebaseUid(userId) ? await loadAccountFor(phone, userId) : null;
     const account: AccountData = existing ?? {
@@ -264,14 +283,17 @@ function useAppModel() {
     await ensureCatalog();
     enter(account, userId);
     return account;
-  }, [repo, loadAccountFor, ensureCatalog, enter]);
+  }, [repo, checkVerified, loadAccountFor, ensureCatalog, enter]);
 
   const signOut = useCallback(async () => {
+    // Stop the live listeners first: once Firebase signs out, the rules reject them.
+    uidRef.current = null;
+    stopListening.current?.();
+    stopListening.current = null;
     await getPhoneAuth().signOut().catch(() => undefined);
     await clearSession();
     remoteRef.current = null;
     loadedRef.current = null;
-    uidRef.current = null;
     setAuthUid(null);
     setSyncError(null);
     dispatch({ type: 'signedOut' });
