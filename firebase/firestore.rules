@@ -1,16 +1,42 @@
 rules_version = '2';
-// Draft security rules for SANAD's Firestore structure (see src/models/firestore.ts).
+// Security rules for SANAD's Firestore structure (see src/models/firestore.ts and docs/firestore-data.md).
+// Publish: Firebase console > Firestore Database > Rules, paste this file, Publish.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function isUser(uid) { return signedIn() && request.auth.uid == uid; }
     function isProvider() { return signedIn() && exists(/databases/$(database)/documents/providers/$(request.auth.uid)); }
 
-    // Customers own their profile, cars and addresses.
+    // Only the fields the app writes (see UserDoc, CarDoc, AddressDoc in src/models/firestore.ts).
+    function onlyFields(fields) { return request.resource.data.keys().hasOnly(fields); }
+    function validUser() {
+      return onlyFields(['phone', 'name', 'createdAt', 'defaultCarId', 'defaultAddressId', 'firstWashUsed', 'pushToken'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 60;
+    }
+    function validCar() {
+      return onlyFields(['make', 'model', 'year', 'plate', 'color', 'fuel', 'isDefault', 'lastServiceAt'])
+        && request.resource.data.plate is string && request.resource.data.isDefault is bool;
+    }
+    function validAddress() {
+      return onlyFields(['label', 'line', 'landmark', 'location', 'isDefault'])
+        && request.resource.data.location is latlng && request.resource.data.isDefault is bool;
+    }
+
+    // Customers own their profile, cars and addresses: nobody else can read or write them.
     match /users/{uid} {
-      allow read, write: if isUser(uid);
-      match /cars/{carId} { allow read, write: if isUser(uid); }
-      match /addresses/{addressId} { allow read, write: if isUser(uid); }
+      allow read, delete: if isUser(uid);
+      // The profile's phone must be the number Firebase Authentication verified, and cannot change later.
+      allow create: if isUser(uid) && validUser() && request.resource.data.phone == request.auth.token.phone_number;
+      allow update: if isUser(uid) && validUser() && request.resource.data.phone == resource.data.phone;
+
+      match /cars/{carId} {
+        allow read, delete: if isUser(uid);
+        allow create, update: if isUser(uid) && validCar();
+      }
+      match /addresses/{addressId} {
+        allow read, delete: if isUser(uid);
+        allow create, update: if isUser(uid) && validAddress();
+      }
     }
 
     // Catalogue is public to signed-in users, edited only from the admin console.
