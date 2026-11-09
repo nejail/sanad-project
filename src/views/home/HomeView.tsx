@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,12 +11,19 @@ import { getService, homeServiceIds } from '../../models/catalog';
 import { isFirstWashFree } from '../../models/pricing';
 import { ServiceId } from '../../models/types';
 import { RootStackParamList } from '../../navigation/types';
+import { ensureNotificationPermission } from '../../services/notifications';
 import { useAccount, useApp } from '../../viewModels/AppContext';
 import { colors, font } from '../../theme';
 
 /** 03 Home: greeting, promo, the user's registered cars, and the six services. */
 export default function HomeView() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+
+  // Ask for notification permission once the driver is signed in, so booking updates can show.
+  // (Expo Go asked earlier for the OTP notification; with Firebase SMS sign-in nothing asked before.)
+  useEffect(() => {
+    ensureNotificationPermission().catch((e) => console.warn('[notifications] permission request failed', e));
+  }, []);
   const { startBooking } = useApp(); // re-renders when the catalogue loads from Firestore
   const { user, cars, orders } = useAccount();
   const firstWashFree = isFirstWashFree(orders);
