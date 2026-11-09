@@ -1,31 +1,31 @@
-# SANAD Prototype (Sprint 3)
+# SANAD (Sprint 4: first version)
 
-Functional, clickable React Native prototype of **SANAD**, an on-demand car services app for drivers in Qatar, built for 67-443 Mobile Applications (CMU-Q).
+React Native app for **SANAD**, an on-demand car services app for drivers in Qatar, built for 67-443 Mobile Applications (CMU-Q).
 
 Team Sanad: Nasser Al-Ejail (nejail), Hassan Al-Qassabi (haq), Mohammed Al-Marri (mrmarri)
 
-The screens follow the revised high-fidelity Figma file. The prototype is also used to test whether the key technologies SANAD depends on work on real devices.
+The screens follow the revised high-fidelity Figma file. Sprint 4 adds real SMS sign-in with Firebase Authentication, which runs in a development build.
 
 ## Run it
 
-Requirements: Node 20+, and either the **Expo Go** app on your phone or the iOS Simulator.
+Requirements: Node 20+, a Mac with Xcode for the development build, and an iPhone or the iOS Simulator. The project uses **Expo SDK 57** (React Native 0.86).
 
-```bash
-npm install
-npx expo start
-```
+| Mode | Command | Sign-in |
+|---|---|---|
+| Development build (full app) | `npm run prebuild` then `npm run ios:device` (first time), later `npx expo start` | Real SMS through Firebase Authentication |
+| Expo Go (quick UI work) | `npm run go` | Prototype code shown as a notification |
 
-Then scan the QR code with the camera (iPhone) or Expo Go (Android), or press `i` for the iOS Simulator.
-
-The project uses **Expo SDK 57** (React Native 0.86), the same SDK as the course labs, so it opens in Expo Go 57. GPS, camera and notifications are best tested on a physical phone.
+The development build needs `GoogleService-Info.plist` in the project root (shared privately, not committed). Full setup, including a free Apple ID: [docs/firebase-setup.md](docs/firebase-setup.md).
 
 Other commands:
 
 ```bash
-npm test            # 52 unit tests (pricing, OTP rules, validation, tracking, API JSON parsing, Firestore mapping)
+npm test            # unit tests (auth, pricing, OTP rules, validation, tracking, API JSON parsing, Firestore mapping)
 npm run typecheck   # TypeScript strict mode
-npx expo start --web  # browser preview (maps, secure store, haptics are stubbed)
+npx expo start --web  # browser preview (maps, secure store, haptics, Firebase are stubbed)
 ```
+
+Sprint 4 task prompts for teammates: [docs/prompts](docs/prompts).
 
 ## Demo script
 
@@ -58,7 +58,7 @@ Splash, Sign In, Register, Verify OTP, Add First Car, Home, six service screens 
 | Order and OTP alerts | `expo-notifications` (local) | Yes | Real local notifications | Remote push needs a development build, APNs/FCM and a push server |
 | Keep the user signed in | `expo-secure-store` | Yes | Real (Keychain / Keystore) | Store a server-issued session token |
 | Cars, addresses, orders offline | `@react-native-async-storage/async-storage` | Yes | Real | Cache of backend data |
-| Secure sign in | OTP rules in `src/models/otp.ts` | n/a | Simulated: code generated on device | Server-side OTP (e.g. Twilio Verify or Supabase phone auth) so the code never exists on the phone |
+| Secure sign in | Firebase Authentication (phone) via React Native Firebase, `src/services/auth.ts` | Needs dev build | Real SMS in the development build; prototype OTP rules (`src/models/otp.ts`) as the Expo Go fallback | Same; Blaze plan for real SMS at scale |
 | Contact provider / SOS | `Linking` (`tel:`, WhatsApp link) | Yes | Real | Masked numbers through a calling provider |
 | Nearby providers and garages | Nominatim search API, with Overpass asked in parallel (OpenStreetMap JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts`; Nominatim answers on device, Overpass timed out from Qatar | Self-hosted service or Google Places |
 | Road distance, ETA, route | OSRM route API (JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts` | Self-hosted OSRM or Google Routes |
