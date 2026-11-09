@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { fetchNominatimPlaces, fetchOverpassPlaces, fetchRoute } from '../api/osm';
 import { LocalOtpService, OTP_TTL_MS } from '../models/otp';
+import { firebaseProjectId, getPhoneAuth } from '../services/auth';
 import { canDial } from '../services/contact';
 import { getCurrentPlace, reverseGeocode, DOHA } from '../services/location';
 import { pickCarPhoto } from '../services/media';
@@ -50,6 +51,18 @@ export const TESTS: FeasibilityTest[] = [
       const ok = await notify('SANAD test', 'If you can read this, local notifications work.', 3);
       if (!ok) throw new Error('Permission denied or notifications unavailable');
       return 'Scheduled a notification for 3 seconds from now; check that it appears';
+    },
+  },
+  {
+    id: 'firebase',
+    technology: 'Firebase Authentication (React Native Firebase)',
+    name: 'Firebase phone sign-in',
+    usedFor: 'Real SMS verification codes for register and sign in',
+    run: async () => {
+      const projectId = firebaseProjectId();
+      if (!projectId) throw new Error('Not available here: open the SANAD development build (Expo Go has no Firebase native code)');
+      const user = getPhoneAuth().currentUser();
+      return `Connected to Firebase project "${projectId}"; ${user ? `signed in as +974 ${user.phone}` : 'no user signed in yet'}`;
     },
   },
   {
