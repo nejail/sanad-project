@@ -1,6 +1,19 @@
 import fs from 'fs';
 import path from 'path';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
+import { ConfigPlugin, withEntitlementsPlist } from 'expo/config-plugins';
+
+/**
+ * Removes the Push Notifications entitlement that expo-notifications adds.
+ * SANAD only schedules local notifications, and free Apple ID (Personal Team) builds cannot be
+ * signed with push enabled. Firebase phone sign-in then verifies with reCAPTCHA instead of a
+ * silent push. Set SANAD_PUSH=1 when building with a paid Apple Developer account to keep it.
+ */
+const withoutPushEntitlement: ConfigPlugin = (config) =>
+  withEntitlementsPlist(config, (mod) => {
+    if (process.env.SANAD_PUSH !== '1') delete mod.modResults['aps-environment'];
+    return mod;
+  });
 
 /**
  * Adds Firebase to the native build only when the Firebase config files are present.
@@ -23,10 +36,10 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig => {
     );
   }
 
-  return {
+  return withoutPushEntitlement({
     ...(config as ExpoConfig),
     ios: { ...config.ios, ...(hasIos ? { googleServicesFile: './GoogleService-Info.plist' } : {}) },
     android: { ...config.android, ...(hasAndroid ? { googleServicesFile: './google-services.json' } : {}) },
     plugins,
-  };
+  });
 };
