@@ -15,7 +15,7 @@
  *   orders/{orderId}/tracking/live       TrackingDoc  (written by the provider app every few seconds)
  *   reviews/{reviewId}                   ReviewDoc
  */
-import { Address, Car, Order, OrderStatus, Quote, ServiceDefinition, ServiceId, User } from './types';
+import { Address, Car, Order, OrderStatus, Quote, ServiceDefinition, ServiceId, ServiceOption, User } from './types';
 
 /** Stand-ins for Firestore's GeoPoint and Timestamp so the models compile without the SDK. */
 export interface GeoPointLike {
@@ -175,5 +175,58 @@ export function orderToDoc(o: Order, customerId: string, providerId: string | nu
     statusHistory: [{ status: o.status, at: o.createdAt }],
     createdAt: o.createdAt,
     updatedAt: o.createdAt,
+  };
+}
+
+/** The six service ids, used to validate documents read from the `services` collection. */
+const SERVICE_IDS: ServiceId[] = ['battery', 'fuel', 'carwash', 'tire', 'oil', 'emergency'];
+
+/** Turns a built-in service definition into the document stored at services/{serviceId}. */
+export function serviceToDoc(s: ServiceDefinition, active = true): ServiceDoc {
+  const { id, ...rest } = s;
+  // Firestore rejects `undefined`, so optional fields are left out instead.
+  const doc: ServiceDoc = { ...rest, active };
+  if (doc.accent === undefined) delete doc.accent;
+  if (doc.addOns === undefined) delete doc.addOns;
+  return doc;
+}
+
+/** Checks that one option row from Firestore has the fields the screens and pricing need. */
+function isOption(o: unknown): o is ServiceOption {
+  const x = o as ServiceOption;
+  return !!x && typeof x.id === 'string' && typeof x.title === 'string' && typeof x.price === 'number' && Number.isFinite(x.price) && x.price >= 0;
+}
+
+/**
+ * Reads a services/{serviceId} document back into a ServiceDefinition.
+ * Returns null when the document is not usable (unknown id, missing options or a bad price),
+ * so one bad edit in the console cannot break the booking screens. Missing display text falls
+ * back to the built-in definition when one is given.
+ */
+export function serviceFromDoc(id: string, data: unknown, builtIn?: ServiceDefinition): (ServiceDefinition & { active: boolean }) | null {
+  if (!SERVICE_IDS.includes(id as ServiceId)) return null;
+  const d = (data ?? {}) as Partial<ServiceDoc>;
+  if (!Array.isArray(d.options) || d.options.length === 0 || !d.options.every(isOption)) return null;
+  if (d.addOns !== undefined && (!Array.isArray(d.addOns) || !d.addOns.every((a) => typeof a?.id === 'string' && typeof a?.price === 'number'))) return null;
+  const pricing = d.pricing ?? builtIn?.pricing;
+  if (pricing !== 'fixed' && pricing !== 'perLitre' && pricing !== 'towing') return null;
+  const text = (key: keyof ServiceDefinition) => {
+    const v = (d as Record<string, unknown>)[key];
+    return typeof v === 'string' ? v : ((builtIn?.[key] as string | undefined) ?? '');
+  };
+  return {
+    id: id as ServiceId,
+    title: text('title'),
+    shortTitle: text('shortTitle'),
+    fromLabel: text('fromLabel'),
+    icon: text('icon'),
+    accent: d.accent === 'danger' ? 'danger' : builtIn?.accent,
+    prompt: text('prompt'),
+    notesLabel: text('notesLabel'),
+    notesPlaceholder: text('notesPlaceholder'),
+    pricing,
+    options: d.options.map((o) => ({ ...o, subtitle: o.subtitle ?? '', priceLabel: o.priceLabel ?? `${o.price} QAR`, icon: o.icon ?? 'ellipse-outline' })),
+    addOns: d.addOns ?? undefined,
+    active: d.active !== false,
   };
 }

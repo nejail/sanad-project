@@ -112,8 +112,34 @@ export const FUEL_DELIVERY_FEE = 15;
 export const TOWING_PER_KM = 5;
 export const VAT_RATE = 0.05;
 
+/**
+ * The catalogue the app is using right now. Starts as the built-in SERVICES above and is
+ * replaced once per launch by the `services` collection in Firestore when it can be read
+ * (see src/services/catalogRepo.ts). Pricing and every screen read through getService.
+ */
+let active: ServiceDefinition[] = SERVICES;
+let hidden: ServiceId[] = [];
+
+/** Replaces the active catalogue. `hiddenIds` are services switched off in the console (active: false). */
+export function setActiveCatalog(services: ServiceDefinition[], hiddenIds: ServiceId[] = []) {
+  active = services;
+  hidden = hiddenIds;
+}
+
+/** Goes back to the built-in catalogue (used on sign out and in tests). */
+export function resetCatalog() {
+  active = SERVICES;
+  hidden = [];
+}
+
+/** Services to show on Home, in the wireframe order, without the ones switched off. */
+export function homeServiceIds(): ServiceId[] {
+  return HOME_SERVICE_ORDER.filter((id) => !hidden.includes(id));
+}
+
+/** Looks up a service in the active catalogue (falls back to the built-in one for old orders). */
 export function getService(id: ServiceId): ServiceDefinition {
-  const s = SERVICES.find((x) => x.id === id);
+  const s = active.find((x) => x.id === id) ?? SERVICES.find((x) => x.id === id);
   if (!s) throw new Error(`Unknown service: ${id}`);
   return s;
 }
