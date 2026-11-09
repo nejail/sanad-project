@@ -2,7 +2,10 @@ import { Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { fetchNominatimPlaces, fetchOverpassPlaces, fetchRoute } from '../api/osm';
 import { LocalOtpService, OTP_TTL_MS } from '../models/otp';
+import { COLLECTIONS } from '../models/firestore';
 import { firebaseProjectId, getPhoneAuth } from '../services/auth';
+import { loadCatalog } from '../services/catalogRepo';
+import { FirestoreRepo, getFirestoreApi } from '../services/firestoreRepo';
 import { canDial } from '../services/contact';
 import { getCurrentPlace, reverseGeocode, DOHA } from '../services/location';
 import { pickCarPhoto } from '../services/media';
@@ -63,6 +66,33 @@ export const TESTS: FeasibilityTest[] = [
       if (!projectId) throw new Error('Not available here: open the SANAD development build (Expo Go has no Firebase native code)');
       const user = getPhoneAuth().currentUser();
       return `Connected to Firebase project "${projectId}"; ${user ? `signed in as +974 ${user.phone}` : 'no user signed in yet'}`;
+    },
+  },
+  {
+    id: 'firestore',
+    technology: 'Cloud Firestore (React Native Firebase)',
+    name: 'Account data in Firestore',
+    usedFor: 'Profile, cars and addresses saved to the account and synced across phones',
+    run: async () => {
+      if (!firebaseProjectId()) throw new Error('Not available here: open the SANAD development build (Expo Go has no Firebase native code)');
+      const user = getPhoneAuth().currentUser();
+      if (!user) throw new Error('Sign in first: the security rules only allow a signed-in user to read their own data');
+      const account = await new FirestoreRepo(getFirestoreApi()).loadAccount(user.uid);
+      if (!account) throw new Error(`No document at ${COLLECTIONS.users}/${user.uid} yet`);
+      return `Read ${COLLECTIONS.users}/${user.uid}: ${account.cars.length} car(s), ${account.addresses.length} address(es)`;
+    },
+  },
+  {
+    id: 'catalog',
+    technology: 'Cloud Firestore (services collection)',
+    name: 'Service catalogue',
+    usedFor: 'Prices and options editable in the console without an app update',
+    run: async () => {
+      if (!firebaseProjectId()) throw new Error('Not available here: open the SANAD development build (Expo Go has no Firebase native code)');
+      const result = await loadCatalog(getFirestoreApi());
+      if (result.source !== 'firestore') throw new Error(`Using built-in prices: ${result.reason}`);
+      const jump = result.services.find((s) => s.id === 'battery')?.options.find((o) => o.id === 'jump');
+      return `${result.fromFirestore} of 6 services read from Firestore${jump ? `; Jump Start costs ${jump.price} QAR` : ''}`;
     },
   },
   {
