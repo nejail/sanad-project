@@ -85,6 +85,11 @@ describe('firebaseAuthMessage', () => {
     expect(firebaseAuthMessage({ code })).toContain(text);
   });
 
+  it('names a blocked SMS region instead of a disabled provider', () => {
+    const e = { code: 'auth/operation-not-allowed', message: 'SMS unable to be sent until this region enabled by the app developer.' };
+    expect(firebaseAuthMessage(e)).toContain('SMS region policy');
+  });
+
   it('falls back to the error message for unknown codes', () => {
     expect(firebaseAuthMessage(new Error('Something odd'))).toBe('Something odd');
   });

@@ -68,6 +68,10 @@ export function firebaseAuthMessage(error: unknown): string {
     case 'auth/network-request-failed':
       return 'No internet connection. Check your connection and try again.';
     case 'auth/operation-not-allowed':
+      // Firebase uses this code both for a disabled Phone provider and for a blocked SMS region.
+      if (/region/i.test((error as Error)?.message ?? '')) {
+        return 'SMS to this country is blocked for this app (Firebase console > Authentication > Settings > SMS region policy: allow Qatar).';
+      }
       return 'Phone sign-in is not enabled for this app yet (Firebase console > Authentication > Sign-in method).';
     case 'auth/billing-not-enabled':
       return 'SMS sending needs billing enabled on the Firebase project. Use a test number for now.';
