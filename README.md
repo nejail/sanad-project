@@ -20,7 +20,8 @@ The development build needs `GoogleService-Info.plist` in the project root (shar
 Other commands:
 
 ```bash
-npm test            # unit tests (auth, pricing, OTP rules, validation, tracking, API JSON parsing, Firestore mapping)
+npm test            # unit tests (auth, pricing, OTP rules, validation, tracking, API JSON parsing, Firestore mapping, repository and catalogue)
+npm run seed:services -- --dry-run   # preview the Firestore service catalogue (see docs/firestore-data.md)
 npm run typecheck   # TypeScript strict mode
 npx expo start --web  # browser preview (maps, secure store, haptics, Firebase are stubbed)
 ```
@@ -62,7 +63,8 @@ Splash, Sign In, Register, Verify OTP, Add First Car, Home, six service screens 
 | Contact provider / SOS | `Linking` (`tel:`, WhatsApp link) | Yes | Real | Masked numbers through a calling provider |
 | Nearby providers and garages | Nominatim search API, with Overpass asked in parallel (OpenStreetMap JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts`; Nominatim answers on device, Overpass timed out from Qatar | Self-hosted service or Google Places |
 | Road distance, ETA, route | OSRM route API (JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts` | Self-hosted OSRM or Google Routes |
-| Backend data | Cloud Firestore (structure in `src/models/firestore.ts`, rules in `firebase/firestore.rules`) | Needs dev build | Structure and converters defined | Next sprint |
+| Account data | Cloud Firestore `users/{uid}` with `cars` and `addresses` (`src/services/firestoreRepo.ts`) | Needs dev build | Real in the development build: live sync, offline cache, security rules; AsyncStorage in Expo Go | Orders move to Firestore in Sprint 5 |
+| Service catalogue | Cloud Firestore `services` (`src/services/catalogRepo.ts`) | Needs dev build | Real: prices editable in the console, built-in fallback | Same |
 | Navigation | React Navigation (native stack + bottom tabs) | Yes | Real | Same |
 | Provider matching and live tracking | Overpass + OSRM | n/a | Real nearest business and road route; movement sped up | `orders/{id}/tracking/live` written by the provider app |
 
@@ -77,15 +79,19 @@ src/views/                   screens (auth, home, booking, orders, cars, profile
 src/components/              shared UI (buttons, cards, option rows, map, logo)
 src/api/osm.ts               external APIs (Overpass, OSRM) and JSON parsing
 src/models/firestore.ts      Firebase structure and converters
+src/services/firestoreRepo.ts  users, cars and addresses in Firestore (load, save, live updates)
+src/services/catalogRepo.ts  service catalogue from Firestore with built-in fallback
+scripts/seed-services.ts     seeds the services collection (admin)
 src/feasibility/tests.ts     the in-app technology tests
-firebase/firestore.rules     draft security rules
-docs/                        data mapping, feasibility results, user test plan, feature schedule
+firebase/firestore.rules     security rules (publish in the Firebase console)
+docs/                        Firebase setup, Firestore data, data mapping, feasibility results, user test plan, feature schedule
 __tests__/                   Jest unit tests
 ```
 
 ## Known limitations
 
-- No backend yet: data lives on the device, the technician and their speed are simulated (their starting business and road route are real), and the OTP is generated locally.
+- Expo Go has no Firebase: there the OTP is generated locally and data stays on the phone. In the development build, sign-in, profile, cars, addresses and the service catalogue use Firebase.
+- Orders are still saved on the phone until Sprint 5; the technician and their speed are simulated (their starting business and road route are real).
 - The public Overpass and OSRM servers are for light use; the app falls back to estimates when they are unreachable.
 - Card payment and promo codes are placeholders.
 - The browser preview cannot show maps, secure storage, haptics or reverse geocoding; use a phone or simulator.

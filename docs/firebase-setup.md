@@ -17,7 +17,7 @@ Use a **new project for SANAD**, not a lab project, so its data, security rules 
 4. Optional, for Android: **Add app > Android**, package `qa.cmu.sanad.prototype`, download **google-services.json** into the project root.
 5. **Build > Authentication > Get started > Sign-in method > Phone > Enable**.
 6. Under **Phone numbers for testing**, add `+974 5012 3456` with code `123456` (the demo account). Test numbers never send an SMS and have no cost.
-7. **Build > Firestore Database > Create database**, location Doha (`me-central1`) if it is listed, otherwise the closest available, start in **production mode**. Hassan publishes the rules from `firebase/firestore.rules`.
+7. **Build > Firestore Database > Create database**, location Doha (`me-central1`) if it is listed, otherwise the closest available, start in **production mode**. Then publish the rules from `firebase/firestore.rules` and seed the service catalogue: see [firestore-data.md](firestore-data.md).
 
 The two config files are **not committed** (the repo is public). Share them with the team privately, for example in the team chat.
 
