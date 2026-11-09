@@ -49,6 +49,15 @@ export function isVerifiedNumber(user: AuthUser | null, phone: string): boolean 
   return !!user?.phone && user.phone === phone;
 }
 
+/**
+ * Prints the full Firebase error to the Metro log. The iOS SDK reports server rejections it does not
+ * recognise as auth/internal-error, and the real reason is only in the native details.
+ */
+function logAuthError(step: string, error: unknown) {
+  const e = error as { code?: string; message?: string; userInfo?: unknown; nativeErrorMessage?: string; nativeErrorCode?: string };
+  console.warn(`[auth] ${step} failed`, JSON.stringify({ code: e?.code, message: e?.message, userInfo: e?.userInfo, nativeErrorCode: e?.nativeErrorCode, nativeErrorMessage: e?.nativeErrorMessage }, null, 2));
+}
+
 /** Turns Firebase Auth error codes into messages a driver can act on. */
 export function firebaseAuthMessage(error: unknown): string {
   const code = (error as { code?: string })?.code ?? '';
@@ -78,6 +87,8 @@ export function firebaseAuthMessage(error: unknown): string {
     case 'auth/missing-client-identifier':
     case 'auth/captcha-check-failed':
       return 'Verification was cancelled. Try again and finish the check that opens.';
+    case 'auth/internal-error':
+      return 'The code could not be sent right now. Try again in a minute.';
     case 'auth/missing-verification-id':
       return 'Request a new code first.';
     default:
@@ -108,6 +119,7 @@ export class FirebasePhoneAuth implements PhoneAuthProvider {
       // Firebase controls resend limits itself; 30 s keeps the UI consistent with local mode.
       return { cooldownSeconds: 30 };
     } catch (e) {
+      logAuthError('sendCode', e);
       throw new Error(firebaseAuthMessage(e));
     }
   }
@@ -122,6 +134,7 @@ export class FirebasePhoneAuth implements PhoneAuthProvider {
       this.confirmation = null;
       return { uid: user.uid, phone: user.phoneNumber ? fromE164(user.phoneNumber) : phone };
     } catch (e) {
+      logAuthError('confirmCode', e);
       throw new Error(firebaseAuthMessage(e));
     }
   }
