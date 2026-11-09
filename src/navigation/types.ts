@@ -14,7 +14,7 @@ export type RootStackParamList = {
   Splash: undefined;
   // Signed out
   Login: undefined;
-  Register: { phone?: string; verified?: boolean } | undefined;
+  Register: { phone?: string; verified?: boolean; uid?: string } | undefined;
   VerifyOtp: { phone: string; mode: 'signin' | 'register'; name?: string };
   // Signed in
   AddFirstCar: undefined;

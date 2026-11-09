@@ -1,8 +1,9 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { orderTitle } from '../models/catalog';
 import { buildQuote, isFirstWashFree } from '../models/pricing';
 import { DEMO_ADDRESSES, DEMO_CARS, DEMO_ORDERS, DEMO_PHONE, DEMO_USER } from '../models/seed';
 import { Address, BookingDraft, Car, Order, OrderStatus, ServiceId } from '../models/types';
+import { getPhoneAuth } from '../services/auth';
 import { clearSession, createSession, readSession } from '../services/session';
 import { AccountData, loadAccount, saveAccount } from '../services/storage';
 
@@ -55,15 +56,39 @@ async function findAccount(phone: string): Promise<AccountData | null> {
 function useAppModel() {
   const [state, dispatch] = useReducer(reducer, { status: 'loading', account: null, draft: emptyDraft });
   const hydrated = useRef(false);
+  // Signed-in user id: the Firebase uid in the development build, "local:<phone>" in Expo Go.
+  // Firestore documents are keyed by this id (users/{uid}).
+  const [authUid, setAuthUid] = useState<string | null>(null);
 
-  // Restore an existing session (used by the splash screen to decide where to go).
+  /**
+   * Restore an existing session (used by the splash screen to decide where to go).
+   * In Firebase mode the Firebase user is the source of truth; otherwise the secure-store session.
+   */
   const restoreSession = useCallback(async (): Promise<'signedIn' | 'signedOut'> => {
-    const session = await readSession();
-    const account = session ? await findAccount(session.phone) : null;
+    const auth = getPhoneAuth();
+    let phone: string | null = null;
+    let userId: string | null = null;
+    if (auth.mode === 'firebase') {
+      const user = auth.currentUser();
+      if (user?.phone) {
+        phone = user.phone;
+        userId = user.uid;
+      }
+    } else {
+      const session = await readSession();
+      if (session) {
+        phone = session.phone;
+        userId = `local:${session.phone}`;
+      }
+    }
+    const account = phone ? await findAccount(phone) : null;
     if (account) {
+      setAuthUid(userId);
       dispatch({ type: 'signedIn', account });
       return 'signedIn';
     }
+    await clearSession();
+    if (auth.mode === 'firebase' && auth.currentUser()) await auth.signOut();
     dispatch({ type: 'signedOut' });
     return 'signedOut';
   }, []);
@@ -80,18 +105,19 @@ function useAppModel() {
 
   const accountExists = useCallback(async (phone: string) => (await findAccount(phone)) !== null, []);
 
-  /** Called after a successful OTP check for an existing user. */
-  const signIn = useCallback(async (phone: string) => {
+  /** Called after a successful OTP check for an existing user. `userId` comes from the auth provider. */
+  const signIn = useCallback(async (phone: string, userId: string = `local:${phone}`) => {
     const account = await findAccount(phone);
     if (!account) throw new Error('No account for this number');
     await createSession(phone);
+    setAuthUid(userId);
     hydrated.current = false;
     dispatch({ type: 'signedIn', account });
     return account;
   }, []);
 
   /** Called after a successful OTP check for a new user. New users start with no cars. */
-  const register = useCallback(async (phone: string, name: string) => {
+  const register = useCallback(async (phone: string, name: string, userId: string = `local:${phone}`) => {
     const account: AccountData = {
       user: { phone, name: name.trim(), createdAt: new Date().toISOString() },
       cars: [],
@@ -100,13 +126,16 @@ function useAppModel() {
     };
     await saveAccount(account);
     await createSession(phone);
+    setAuthUid(userId);
     hydrated.current = false;
     dispatch({ type: 'signedIn', account });
     return account;
   }, []);
 
   const signOut = useCallback(async () => {
+    await getPhoneAuth().signOut().catch(() => undefined);
     await clearSession();
+    setAuthUid(null);
     dispatch({ type: 'signedOut' });
   }, []);
 
@@ -196,6 +225,8 @@ function useAppModel() {
   return useMemo(
     () => ({
       ...state,
+      uid: authUid,
+      authMode: getPhoneAuth().mode,
       restoreSession,
       accountExists,
       signIn,
@@ -209,7 +240,7 @@ function useAppModel() {
       placeOrder,
       setOrderStatus,
     }),
-    [state, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus],
+    [state, authUid, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus],
   );
 }
 

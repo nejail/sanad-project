@@ -32,7 +32,7 @@ export default function RegisterView({ navigation, route }: ScreenProps<'Registe
         navigation.navigate('Login');
         return;
       }
-      if (verified) await register(p, name);
+      if (verified) await register(p, name, route.params?.uid);
       else navigation.navigate('VerifyOtp', { phone: p, mode: 'register', name: name.trim() });
     } finally {
       setBusy(false);

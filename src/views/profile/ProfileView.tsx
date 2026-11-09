@@ -23,7 +23,7 @@ export default function ProfileView() {
     { icon: 'card-outline', title: 'Payment Methods', sub: 'Coming soon', onPress: () => soon('Payment Methods') },
     { icon: 'flask-outline', title: 'Technology Feasibility Tests', sub: 'Run the device checks for this prototype', onPress: () => nav.navigate('FeasibilityTests'), testID: 'open-feasibility' },
     { icon: 'help-circle-outline', title: 'Help & Support', sub: 'Get assistance', onPress: () => soon('Help & Support') },
-    { icon: 'information-circle-outline', title: 'About SANAD', sub: 'Prototype v0.3 (Sprint 3)', onPress: () => soon('About SANAD') },
+    { icon: 'information-circle-outline', title: 'About SANAD', sub: 'Version 0.4 (Sprint 4)', onPress: () => soon('About SANAD') },
   ];
 
   return (
