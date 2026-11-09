@@ -34,6 +34,9 @@ export default function RegisterView({ navigation, route }: ScreenProps<'Registe
       }
       if (verified) await register(p, name, route.params?.uid);
       else navigation.navigate('VerifyOtp', { phone: p, mode: 'register', name: name.trim() });
+    } catch (e) {
+      // e.g. no connection, or the account could not be created
+      Alert.alert('Could not create your account', (e as Error).message);
     } finally {
       setBusy(false);
     }
