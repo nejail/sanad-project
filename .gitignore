@@ -40,3 +40,7 @@ yarn-error.*
 /ios
 /android
 push_to_github.sh
+
+# Firebase config files (shared privately in the team chat, not committed to the public repo)
+GoogleService-Info.plist
+google-services.json

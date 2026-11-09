@@ -2,7 +2,7 @@
   "expo": {
     "name": "SANAD",
     "slug": "sanad-prototype",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -16,7 +16,10 @@
       "supportsTablet": false,
       "bundleIdentifier": "qa.cmu.sanad.prototype",
       "infoPlist": {
-        "LSApplicationQueriesSchemes": ["tel", "whatsapp"]
+        "LSApplicationQueriesSchemes": [
+          "tel",
+          "whatsapp"
+        ]
       }
     },
     "android": {
