@@ -130,6 +130,7 @@ export interface BookingDraft {
   photoUri?: string;
   carId?: string;
   address?: Address;
+  locationNotes?: string; // what the driver typed to help the technician find them
   schedule?: Schedule;
   payment: 'cash' | 'card';
   promo?: string;

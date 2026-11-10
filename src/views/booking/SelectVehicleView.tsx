@@ -18,7 +18,7 @@ export default function SelectVehicleView({ navigation }: ScreenProps<'SelectVeh
   return (
     <Screen
       title="Select Vehicle"
-      footer={<PrimaryButton label="Continue" disabled={!draft.carId} onPress={() => navigation.navigate('Location')} testID="vehicle-continue" />}
+      footer={<PrimaryButton label="Continue" disabled={!draft.carId} onPress={() => navigation.navigate('Schedule')} testID="vehicle-continue" />}
     >
       {cars.map((c) => (
         <Card key={c.id} selected={draft.carId === c.id} onPress={() => updateDraft({ carId: c.id })} style={styles.row} testID="vehicle-row">
