@@ -10,9 +10,8 @@ import { useAccount, useApp } from '../../viewModels/AppContext';
 import { colors, font } from '../../theme';
 
 const LITRES = [20, 40, 60];
-const TOW_KM = [2, 5, 10, 20];
 
-/** 04 Service screens (Battery, Fuel Delivery, Car Wash, Tire Service, Oil Change, Emergency 24/7). */
+/** 04 Service screens (Battery, Fuel Delivery, Car Wash, Tire Service, Oil Change, Emergency & Towing). Reached after Location. */
 export default function ServiceView({ navigation, route }: ScreenProps<'Service'>) {
   const service = getService(route.params.serviceId);
   const { draft, updateDraft } = useApp();
@@ -23,7 +22,7 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
 
   useEffect(() => {
     if (!draft.optionId || draft.serviceId !== service.id) {
-      updateDraft({ serviceId: service.id, optionId: service.options[0].id, litres: 40, distanceKm: 2 });
+      updateDraft({ serviceId: service.id, optionId: service.options[0].id, litres: 40, distanceKm: undefined, towTo: undefined });
     }
   }, [service.id]);
 
@@ -47,7 +46,7 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
   const askPhoto = () =>
     Platform.OS === 'web'
       ? attach('library')
-      : Alert.alert('Add a photo', 'Show the provider what is wrong with the car.', [
+      : Alert.alert('Photo of your car', 'A photo of your car so we can find you faster.', [
       { text: 'Take Photo', onPress: () => attach('camera') },
       { text: 'Choose from Library', onPress: () => attach('library') },
       { text: 'Cancel', style: 'cancel' },
@@ -103,13 +102,7 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
       ) : null}
 
       {service.pricing === 'towing' && optionId === 'towing' ? (
-        <>
-          <SectionLabel>Estimated distance to garage</SectionLabel>
-          <Text style={font.small}>You can pick the exact garage on the review screen; the price then uses the real road distance.</Text>
-          <View style={styles.chips}>
-            {TOW_KM.map((k) => <Chip key={k} label={`${k} km`} selected={draft.distanceKm === k} onPress={() => updateDraft({ distanceKm: k })} />)}
-          </View>
-        </>
+        <Banner icon="construct-outline" text="We find the garage nearest to you automatically. The final price is the base fee plus 5 QAR per km by road to that garage, shown on the next screens." />
       ) : null}
 
       <Field
@@ -119,19 +112,20 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
         placeholder={service.notesPlaceholder}
       />
 
-      <SectionLabel>Photo (optional)</SectionLabel>
+      <SectionLabel>Photo of your car</SectionLabel>
+      <Text style={font.small}>A photo of your car so we can find you faster.</Text>
       {draft.photoUri ? (
         <View style={styles.photoRow}>
           <Image source={{ uri: draft.photoUri }} style={styles.photo} />
           <View style={{ flex: 1, gap: 6 }}>
-            <Text style={font.small}>Photo attached. The provider will see it with your request.</Text>
+            <Text style={font.small}>Photo attached. The technician will see it with your request.</Text>
             <Text style={{ color: colors.danger, fontWeight: '600' }} onPress={() => updateDraft({ photoUri: undefined })}>Remove</Text>
           </View>
         </View>
       ) : (
         <Pressable style={styles.addPhoto} onPress={askPhoto} testID="add-photo">
           <Ionicons name="camera-outline" size={20} color={colors.primary} />
-          <Text style={{ color: colors.primary, fontWeight: '600' }}>Add a photo of the car</Text>
+          <Text style={{ color: colors.primary, fontWeight: '600' }}>Add a photo of your car</Text>
         </Pressable>
       )}
 

@@ -2,15 +2,20 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Banner, Card, IconTile, LinkText, OptionRow, PriceSummary, PrimaryButton, Radio, Row, Screen, SectionLabel } from '../../components/ui';
-import { SERVICE_PLACE_KIND } from '../../api/osm';
-import { getOption, getService } from '../../models/catalog';
-import { buildQuote, isFirstWashFree } from '../../models/pricing';
+import { SERVICE_PLACE_KIND, fetchRoute } from '../../api/osm';
+import { orderTitle } from '../../models/catalog';
+import { frequentGarages, usedGarageLabel } from '../../models/garages';
+import { buildQuote, distanceKm as straightKm, isFirstWashFree } from '../../models/pricing';
+import { PlaceRef } from '../../models/types';
 import { ScreenProps } from '../../navigation/types';
 import { useAccount, useApp } from '../../viewModels/AppContext';
 import { useNearbyPlaces } from '../../viewModels/useNearbyPlaces';
 import { colors, font } from '../../theme';
 
-/** 09 Review Order. Also shows the nearest real provider (Overpass + OSRM) and, for towing, real garages to tow to. */
+/**
+ * 09 Review Order. Also shows the nearest real provider (Overpass + OSRM). For towing, the garage
+ * nearest to the driver by road is chosen automatically; garages used before are quick alternatives.
+ */
 export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder'>) {
   const { draft, updateDraft, placeOrder } = useApp();
   const { cars, orders } = useAccount();
@@ -20,16 +25,21 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
 
   const serviceId = draft.serviceId!;
   const optionId = draft.optionId!;
-  const service = getService(serviceId);
-  const option = getOption(serviceId, optionId);
   const car = cars.find((c) => c.id === draft.carId);
   const towing = serviceId === 'emergency' && optionId === 'towing';
   const center = draft.address?.coords;
 
   // Nearest business that can do this service, with driving time to the customer.
   const providers = useNearbyPlaces(center, SERVICE_PLACE_KIND[serviceId], { limit: 3, withRoutes: 1, direction: 'toCustomer' });
-  // For towing: the closest garages, with the real driving distance from the customer.
+  // For towing: the closest garages with the real driving distance, so the nearest by road can be chosen.
   const garages = useNearbyPlaces(center, 'garage', { limit: 3, withRoutes: 3, direction: 'fromCustomer', enabled: towing });
+  const nearestGarage = useMemo(
+    () => [...garages.places].sort((a, b) => (a.route?.distanceKm ?? a.distanceKm) - (b.route?.distanceKm ?? b.distanceKm))[0],
+    [garages.places],
+  );
+  // Garages this driver towed to before, most used first (student feedback).
+  const usedGarages = useMemo(() => frequentGarages(orders).filter((g) => g.id !== nearestGarage?.id), [orders, nearestGarage?.id]);
+  const [routing, setRouting] = useState(false);
 
   const nearest = providers.places[0];
   useEffect(() => {
@@ -40,16 +50,31 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
     }
   }, [nearest?.id, nearest?.route?.durationMin]);
 
+  // Choose the nearest garage automatically once it is known.
   useEffect(() => {
-    const first = garages.places.find((g) => g.route);
-    if (towing && first && !draft.towTo) chooseGarage(first.id);
-  }, [garages.places.length]);
+    if (towing && nearestGarage && !draft.towTo) chooseNearest();
+  }, [nearestGarage?.id]);
 
-  function chooseGarage(id: string) {
-    const g = garages.places.find((x) => x.id === id);
+  /** Tows to the nearest garage, priced by its road distance. */
+  function chooseNearest() {
+    const g = nearestGarage;
     if (!g) return;
     const km = g.route?.distanceKm ?? g.distanceKm;
     updateDraft({ towTo: { id: g.id, name: g.name, coords: g.coords, phone: g.phone, distanceKm: km }, distanceKm: km });
+  }
+
+  /** Tows to a garage used before; asks OSRM for the road distance (straight line if that fails). */
+  async function chooseUsed(g: PlaceRef) {
+    if (!center) return;
+    setRouting(true);
+    let km = Math.round(straightKm(center, g.coords) * 10) / 10;
+    try {
+      km = (await fetchRoute(center, g.coords)).distanceKm;
+    } catch {
+      // keep the straight-line distance
+    }
+    updateDraft({ towTo: { id: g.id, name: g.name, coords: g.coords, phone: g.phone, distanceKm: km }, distanceKm: km });
+    setRouting(false);
   }
 
   const quote = useMemo(
@@ -73,9 +98,10 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
   return (
     <Screen title="Review Order" footer={<PrimaryButton label="Place Order" onPress={place} loading={busy} testID="place-order" />}>
       <Card style={{ gap: 8 }}>
-        <Row label="Service" value={`${service.shortTitle.replace(' Service', '')} ${option.title}`} />
+        <Row label="Service" value={orderTitle(serviceId, optionId)} />
         <Row label="Vehicle" value={car ? `${car.model} · ${car.plate}` : '-'} />
         <Row label="Location" value={draft.address?.line ?? '-'} />
+        {draft.address?.landmark && draft.address.landmark !== draft.address.line ? <Row label="Directions" value={draft.address.landmark} /> : null}
         <Row label="Schedule" value={when} />
         {draft.photoUri ? <Row label="Photo" value="Attached" /> : null}
       </Card>
@@ -106,23 +132,32 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
       {towing ? (
         <>
           <SectionLabel>Tow to</SectionLabel>
-          {garages.loading ? <Loading text="Finding garages and road distances…" /> : null}
-          {garages.places.map((g) => {
-            const km = g.route?.distanceKm ?? g.distanceKm;
-            return (
-              <Card key={g.id} selected={draft.towTo?.id === g.id} onPress={() => chooseGarage(g.id)} style={styles.row} testID="tow-garage">
-                <IconTile name="construct-outline" />
-                <View style={{ flex: 1 }}>
-                  <Text style={[font.h3, { fontSize: 15 }]} numberOfLines={1}>{g.name}</Text>
-                  <Text style={font.small}>{km} km {g.route ? `by road · ${g.route.durationMin} min` : '(straight line)'}</Text>
-                </View>
-                <Radio selected={draft.towTo?.id === g.id} />
-              </Card>
-            );
-          })}
-          {!garages.loading && garages.places.length === 0 ? (
+          {garages.loading ? <Loading text="Finding the garage nearest to you…" /> : null}
+          {nearestGarage ? (
+            <Card selected={draft.towTo?.id === nearestGarage.id} onPress={chooseNearest} style={styles.row} testID="tow-garage">
+              <IconTile name="construct-outline" />
+              <View style={{ flex: 1 }}>
+                <Text style={[font.h3, { fontSize: 15 }]} numberOfLines={1}>{nearestGarage.name}</Text>
+                <Text style={font.small}>Nearest garage · {nearestGarage.route ? `${nearestGarage.route.distanceKm} km by road` : `${nearestGarage.distanceKm} km`}</Text>
+              </View>
+              <Radio selected={draft.towTo?.id === nearestGarage.id} />
+            </Card>
+          ) : null}
+          {usedGarages.length ? <Text style={font.small}>Your garages</Text> : null}
+          {usedGarages.map((g) => (
+            <Card key={g.id} selected={draft.towTo?.id === g.id} onPress={() => chooseUsed(g)} style={styles.row} testID="used-garage">
+              <IconTile name="time-outline" />
+              <View style={{ flex: 1 }}>
+                <Text style={[font.h3, { fontSize: 15 }]} numberOfLines={1}>{g.name}</Text>
+                <Text style={font.small}>{usedGarageLabel(g)}{draft.towTo?.id === g.id ? ` · ${draft.towTo.distanceKm} km` : ''}</Text>
+              </View>
+              <Radio selected={draft.towTo?.id === g.id} />
+            </Card>
+          ))}
+          {routing ? <Loading text="Checking the road distance…" /> : null}
+          {!garages.loading && !nearestGarage ? (
             <>
-              <Banner tone="danger" text={`Couldn't load garages${garages.error ? ` (${garages.error})` : ''}. The estimate uses the distance you chose earlier.`} />
+              <Banner tone="danger" text={`Couldn't find a garage near you${garages.error ? ` (${garages.error})` : ''}. The price shows the base fee; the distance is added when the tow is assigned.`} />
               <LinkText label="Try again" onPress={garages.retry} />
             </>
           ) : null}
