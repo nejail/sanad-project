@@ -30,3 +30,18 @@ export function isValidYear(year: string, now = new Date()): boolean {
   const y = Number(year);
   return Number.isInteger(y) && y >= 1980 && y <= now.getFullYear() + 1;
 }
+
+/** Colour chips on Add Car; "Other" opens a text box for unusual colours. */
+export const CAR_COLORS = ['White', 'Black', 'Silver', 'Gray', 'Red', 'Blue', 'Gold', 'Other'];
+export const OTHER_COLOR = 'Other';
+
+/**
+ * The colour to save for a car: the chosen chip, or the typed colour when "Other" is chosen.
+ * Returns null when "Other" is chosen but nothing usable was typed.
+ */
+export function resolveCarColor(choice: string, typed: string): string | null {
+  if (choice !== OTHER_COLOR) return choice;
+  const t = typed.trim().replace(/\s+/g, ' ');
+  if (t.length < 2 || t.length > 30) return null;
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
