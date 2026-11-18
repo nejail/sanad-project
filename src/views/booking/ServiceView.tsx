@@ -151,7 +151,7 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
         <View style={styles.photoRow}>
           <Image source={{ uri: draft.photoUri }} style={styles.photo} />
           <View style={{ flex: 1, gap: 6 }}>
-            <Text style={font.small}>Photo attached. The technician will see it with your request.</Text>
+            <Text style={font.small}>Photo attached. It is sent with your request so the technician can spot your car.</Text>
             <Text style={{ color: colors.danger, fontWeight: '600' }} onPress={() => updateDraft({ photoUri: undefined })}>Remove</Text>
           </View>
         </View>

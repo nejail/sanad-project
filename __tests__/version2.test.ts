@@ -117,3 +117,16 @@ describe('status notifications (V2 feature 12)', () => {
     expect(statusNotification(order, 'done')).toBeNull();
   });
 });
+
+import { orderPhotoPath, uploadOrderPhoto } from '../src/services/photoUpload';
+
+describe('car photo upload (V2 feature 13)', () => {
+  it('stores the photo in the driver\'s own folder and returns its download URL', async () => {
+    const calls: [string, string, string][] = [];
+    const api = { upload: async (path: string, uri: string, type: string) => { calls.push([path, uri, type]); return `https://storage.test/${path}`; } };
+    const result = await uploadOrderPhoto('uid-1', 'SND-1050', 'file:///tmp/car.jpg', api);
+    expect(orderPhotoPath('uid-1', 'SND-1050')).toBe('order-photos/uid-1/SND-1050.jpg');
+    expect(calls).toEqual([['order-photos/uid-1/SND-1050.jpg', 'file:///tmp/car.jpg', 'image/jpeg']]);
+    expect(result).toEqual({ path: 'order-photos/uid-1/SND-1050.jpg', url: 'https://storage.test/order-photos/uid-1/SND-1050.jpg' });
+  });
+});

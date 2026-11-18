@@ -7,6 +7,7 @@ import { Address, BookingDraft, Car, Order, OrderStatus, Provider, ServiceId } f
 import { getPhoneAuth, isVerifiedNumber } from '../services/auth';
 import { CatalogSource, loadCatalog } from '../services/catalogRepo';
 import { FirestoreRepo, RemoteAccount, firestoreMessage, getFirestoreApi, sameRemote } from '../services/firestoreRepo';
+import { PHOTO_UPLOAD_FAILED, uploadOrderPhoto } from '../services/photoUpload';
 import { clearSession, createSession, readSession } from '../services/session';
 import { AccountData, loadAccount, saveAccount } from '../services/storage';
 
@@ -404,8 +405,19 @@ function useAppModel() {
       customerPhone: a.user.phone,
     };
     dispatch({ type: 'account', update: (acc) => ({ ...acc, orders: [order, ...acc.orders] }) });
+    // Development build: upload the car photo so the technician can open it (V2 feature 13).
+    const userId = uidRef.current;
+    if (repo && isFirebaseUid(userId) && order.photoUri) {
+      uploadOrderPhoto(userId, order.id, order.photoUri)
+        .then(({ path, url }) =>
+          dispatch({ type: 'account', update: (acc) => ({ ...acc, orders: acc.orders.map((o) => (o.id === order.id ? { ...o, photoPath: path, photoUrl: url } : o)) }) }))
+        .catch((e) => {
+          console.warn('[photo] upload failed', e);
+          setSyncError(PHOTO_UPLOAD_FAILED);
+        });
+    }
     return order;
-  }, [state.account, state.draft, providerTestMode]);
+  }, [state.account, state.draft, providerTestMode, repo]);
 
   /** Moves an order to a new status and records when (statusHistory). */
   const setOrderStatus = useCallback((id: string, status: OrderStatus) => {
