@@ -14,7 +14,7 @@ Use a **new project for SANAD**, not a lab project, so its data, security rules 
 1. Go to <https://console.firebase.google.com>, click **Create a project**, name it `SANAD`. Google Analytics is not needed.
 2. **Add app > iOS**. Bundle ID: `qa.cmu.sanad.prototype` (must match `app.json`). App nickname: `SANAD iOS`. Skip the remaining steps in the wizard.
 3. Download **GoogleService-Info.plist** and put it in the project root, next to `package.json`. Skip the wizard's "Add Firebase SDK" and "Add initialization code" steps: the Expo config plugins add the SDK and the setup code when you run `npm run prebuild`.
-4. Optional, for Android: **Add app > Android**, package `qa.cmu.sanad.prototype`, download **google-services.json** into the project root.
+4. For Android: **Add app > Android**, package `qa.cmu.sanad.prototype`, download **google-services.json** into the project root, and add the signing fingerprints. Full steps: [android-build.md](android-build.md).
 5. **Build > Authentication > Get started > Sign-in method > Phone > Enable**.
 6. Under **Phone numbers for testing**, add `+974 5012 3456` with code `123456` (the demo account). Test numbers never send an SMS and have no cost.
 7. **Build > Firestore Database > Create database**, location Doha (`me-central1`) if it is listed, otherwise the closest available, start in **production mode**. Then publish the rules from `firebase/firestore.rules` and seed the service catalogue: see [firestore-data.md](firestore-data.md).

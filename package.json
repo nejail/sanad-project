@@ -56,6 +56,8 @@
     "ios:sim": "expo run:ios",
     "prebuild": "expo prebuild --clean --platform ios",
     "prebuild:android": "expo prebuild --clean --platform android",
+    "android:device": "expo run:android --device",
+    "build:android": "eas build --platform android --profile development",
     "go": "expo start --go",
     "seed:services": "tsx scripts/seed-services.ts",
     "add:provider": "tsx scripts/add-provider.ts"
