@@ -1,8 +1,11 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { orderTitle } from '../models/catalog';
 import { buildQuote, isFirstWashFree } from '../models/pricing';
 import { DEMO_ADDRESSES, DEMO_CARS, DEMO_ORDERS, DEMO_PHONE, DEMO_USER } from '../models/seed';
 import { Address, BookingDraft, Car, Order, OrderStatus, ServiceId } from '../models/types';
+import { getPhoneAuth, isVerifiedNumber } from '../services/auth';
+import { CatalogSource, loadCatalog } from '../services/catalogRepo';
+import { FirestoreRepo, RemoteAccount, firestoreMessage, getFirestoreApi, sameRemote } from '../services/firestoreRepo';
 import { clearSession, createSession, readSession } from '../services/session';
 import { AccountData, loadAccount, saveAccount } from '../services/storage';
 
@@ -20,6 +23,7 @@ type Action =
   | { type: 'signedOut' }
   | { type: 'signedIn'; account: AccountData }
   | { type: 'account'; update: (a: AccountData) => AccountData }
+  | { type: 'remote'; remote: RemoteAccount }
   | { type: 'draft'; patch: Partial<BookingDraft> }
   | { type: 'resetDraft'; serviceId?: ServiceId };
 
@@ -31,6 +35,14 @@ function reducer(state: State, action: Action): State {
       return { status: 'signedIn', account: action.account, draft: emptyDraft };
     case 'account':
       return state.account ? { ...state, account: action.update(state.account) } : state;
+    case 'remote': {
+      // Firestore sent a newer profile, cars or addresses (for example edited on another phone).
+      const a = state.account;
+      if (!a || sameRemote(a, action.remote)) return state;
+      // Keep screen-only details Firestore does not store, such as "last service 5 days ago".
+      const cars = action.remote.cars.map((c) => ({ ...c, lastService: a.cars.find((x) => x.id === c.id)?.lastService }));
+      return { ...state, account: { ...a, user: action.remote.user, cars, addresses: action.remote.addresses } };
+    }
     case 'draft':
       return { ...state, draft: { ...state.draft, ...action.patch } };
     case 'resetDraft':
@@ -39,6 +51,9 @@ function reducer(state: State, action: Action): State {
 }
 
 const uid = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e4)}`;
+
+/** Firebase user ids look like "Xy12..."; prototype sessions use "local:<phone>" and never touch Firestore. */
+const isFirebaseUid = (id: string | null | undefined): id is string => !!id && !id.startsWith('local:');
 
 /** Returns the stored account for a phone number, creating the demo account on first use. */
 async function findAccount(phone: string): Promise<AccountData | null> {
@@ -55,58 +70,236 @@ async function findAccount(phone: string): Promise<AccountData | null> {
 function useAppModel() {
   const [state, dispatch] = useReducer(reducer, { status: 'loading', account: null, draft: emptyDraft });
   const hydrated = useRef(false);
+  // Signed-in user id: the Firebase uid in the development build, "local:<phone>" in Expo Go.
+  // Firestore documents are keyed by this id (users/{uid}).
+  const [authUid, setAuthUid] = useState<string | null>(null);
+  const uidRef = useRef<string | null>(null);
+  // Firestore repository in the development build; null in Expo Go, web and tests (AsyncStorage only).
+  const repo = useMemo(() => (getPhoneAuth().mode === 'firebase' ? new FirestoreRepo(getFirestoreApi()) : null), []);
+  // What Firestore holds right now, so only real changes are written.
+  const remoteRef = useRef<RemoteAccount | null>(null);
+  // Account loaded by accountExists, reused by signIn right after so Firestore is read once.
+  const loadedRef = useRef<{ uid: string; account: AccountData; remote: RemoteAccount } | null>(null);
+  const [catalogSource, setCatalogSource] = useState<CatalogSource>('builtin');
+  const catalogLoaded = useRef(false);
+  // Short message shown when saving to Firestore fails (see SyncToast).
+  const [syncError, setSyncError] = useState<string | null>(null);
+  // True right after a new account is created, so Add Your First Car can confirm the sign-up.
+  const [justRegistered, setJustRegistered] = useState(false);
+  // Stops the live Firestore listeners; called before signing out so they are not rejected.
+  const stopListening = useRef<(() => void) | null>(null);
 
-  // Restore an existing session (used by the splash screen to decide where to go).
-  const restoreSession = useCallback(async (): Promise<'signedIn' | 'signedOut'> => {
-    const session = await readSession();
-    const account = session ? await findAccount(session.phone) : null;
-    if (account) {
-      dispatch({ type: 'signedIn', account });
-      return 'signedIn';
+  /** Firebase mode: the number typed on screen must be the one Firebase verified for this user. */
+  const checkVerified = useCallback((phone: string) => {
+    if (repo && !isVerifiedNumber(getPhoneAuth().currentUser(), phone)) {
+      throw new Error('This is not the number you verified. Go back and verify this number first.');
     }
-    dispatch({ type: 'signedOut' });
-    return 'signedOut';
+  }, [repo]);
+
+  /**
+   * Loads the account for a signed-in user.
+   * Firebase mode: profile, cars and addresses from users/{uid}; orders from the phone (Firestore in Sprint 5).
+   * If there is no profile yet but the phone already has this number's data (an earlier prototype build,
+   * or the demo account), it is uploaded once so nothing is lost.
+   * Local mode: the Sprint 3 AsyncStorage account, unchanged.
+   */
+  const loadAccountFor = useCallback(async (phone: string, userId: string | null): Promise<AccountData | null> => {
+    if (!repo || !isFirebaseUid(userId)) return findAccount(phone);
+    if (loadedRef.current?.uid === userId) return loadedRef.current.account;
+    const local = await loadAccount(phone);
+    let remote: RemoteAccount | null;
+    try {
+      remote = await repo.loadAccount(userId);
+    } catch (e) {
+      // Offline with nothing in the Firestore cache: use the copy kept on the phone, if any.
+      if (local) return local;
+      throw new Error(firestoreMessage(e));
+    }
+    let orders = local?.orders ?? [];
+    if (!remote) {
+      const existing = await findAccount(phone);
+      if (!existing) return null; // new user: Register > Add Your First Car
+      try {
+        await repo.createUser(userId, existing.user, existing.cars, existing.addresses, existing.orders);
+      } catch (e) {
+        throw new Error(firestoreMessage(e));
+      }
+      remote = { user: existing.user, cars: existing.cars, addresses: existing.addresses };
+      orders = existing.orders;
+    }
+    const account: AccountData = { ...remote, orders };
+    loadedRef.current = { uid: userId, account, remote };
+    return account;
+  }, [repo]);
+
+  /** Reads the service catalogue from Firestore once per launch (built-in prices otherwise). */
+  const ensureCatalog = useCallback(async () => {
+    if (catalogLoaded.current) return;
+    const result = await loadCatalog(repo ? getFirestoreApi() : null);
+    if (result.source === 'firestore') catalogLoaded.current = true; // otherwise try again at the next sign-in
+    setCatalogSource(result.source);
+  }, [repo]);
+
+  /** Opens the app for a loaded account: remembers the user id and what Firestore holds, then shows Home. */
+  const enter = useCallback((account: AccountData, userId: string) => {
+    const cached = loadedRef.current?.uid === userId ? loadedRef.current.remote : null;
+    remoteRef.current = isFirebaseUid(userId) ? cached ?? { user: account.user, cars: account.cars, addresses: account.addresses } : null;
+    loadedRef.current = null;
+    uidRef.current = userId;
+    setAuthUid(userId);
+    hydrated.current = false;
+    // Keep a copy on the phone so the app still opens offline.
+    if (isFirebaseUid(userId)) saveAccount(account).catch(() => undefined);
+    dispatch({ type: 'signedIn', account });
   }, []);
 
-  // Persist account changes after the first load.
+  /**
+   * Restore an existing session (used by the splash screen to decide where to go).
+   * In Firebase mode the Firebase user is the source of truth; otherwise the secure-store session.
+   */
+  const restoreSession = useCallback(async (): Promise<'signedIn' | 'signedOut'> => {
+    const auth = getPhoneAuth();
+    let phone: string | null = null;
+    let userId: string | null = null;
+    if (auth.mode === 'firebase') {
+      const user = auth.currentUser();
+      if (user?.phone) {
+        phone = user.phone;
+        userId = user.uid;
+      }
+    } else {
+      const session = await readSession();
+      if (session) {
+        phone = session.phone;
+        userId = `local:${session.phone}`;
+      }
+    }
+    let account: AccountData | null = null;
+    try {
+      account = phone ? await loadAccountFor(phone, userId) : null;
+    } catch {
+      // Firestore could not be reached and nothing is saved on the phone: sign in again later.
+      dispatch({ type: 'signedOut' });
+      return 'signedOut';
+    }
+    if (account && userId) {
+      await ensureCatalog();
+      enter(account, userId);
+      return 'signedIn';
+    }
+    await clearSession();
+    if (auth.mode === 'firebase' && auth.currentUser()) await auth.signOut();
+    dispatch({ type: 'signedOut' });
+    return 'signedOut';
+  }, [loadAccountFor, ensureCatalog, enter]);
+
+  // Persist account changes after the first load: on the phone always, and to Firestore in the development build.
   useEffect(() => {
     if (!state.account) return;
     if (!hydrated.current) {
       hydrated.current = true;
       return;
     }
-    saveAccount(state.account).catch(() => undefined);
-  }, [state.account]);
+    const next = state.account;
+    saveAccount(next).catch(() => undefined);
+    const userId = uidRef.current;
+    if (!repo || !isFirebaseUid(userId)) return;
+    const prev = remoteRef.current;
+    if (prev && sameRemote(prev, next)) return; // nothing Firestore stores has changed (e.g. a new order)
+    remoteRef.current = { user: next.user, cars: next.cars, addresses: next.addresses };
+    // Offline, Firestore keeps the write and sends it later; this only fails for real errors.
+    repo.syncChanges(userId, prev, next).catch((e) => {
+      remoteRef.current = prev; // the next change retries everything that was not saved
+      setSyncError(firestoreMessage(e));
+    });
+  }, [state.account, repo]);
 
-  const accountExists = useCallback(async (phone: string) => (await findAccount(phone)) !== null, []);
+  // Live updates: cars and addresses added or removed on another device appear here too.
+  useEffect(() => {
+    if (!repo || !isFirebaseUid(authUid) || state.status !== 'signedIn') return;
+    const stop = repo.listenAccount(
+      authUid,
+      (remote) => {
+        if (!remote || uidRef.current !== authUid) return; // profile removed in the console, or signed out: keep the screen as is
+        remoteRef.current = remote;
+        dispatch({ type: 'remote', remote });
+      },
+      (e) => {
+        if (uidRef.current === authUid) setSyncError(firestoreMessage(e)); // errors after sign out are expected
+      },
+    );
+    stopListening.current = stop;
+    return () => {
+      stop();
+      if (stopListening.current === stop) stopListening.current = null;
+    };
+  }, [repo, authUid, state.status]);
 
-  /** Called after a successful OTP check for an existing user. */
-  const signIn = useCallback(async (phone: string) => {
-    const account = await findAccount(phone);
+  /**
+   * True when this number already has an account.
+   * Firebase mode: "does users/{uid} exist" for the signed-in user. Before the code is confirmed
+   * nobody is signed in and the rules block the read, so it answers false and register() checks
+   * again after verification instead of overwriting an existing profile.
+   */
+  const accountExists = useCallback(async (phone: string) => {
+    if (!repo) return (await findAccount(phone)) !== null;
+    const user = getPhoneAuth().currentUser();
+    // Before the code is confirmed (or if a different number was verified) we cannot look it up.
+    if (!user || !isVerifiedNumber(user, phone)) return false;
+    return (await loadAccountFor(phone, user.uid)) !== null;
+  }, [repo, loadAccountFor]);
+
+  /** Called after a successful OTP check for an existing user. `userId` comes from the auth provider. */
+  const signIn = useCallback(async (phone: string, userId: string = `local:${phone}`) => {
+    checkVerified(phone);
+    const account = await loadAccountFor(phone, userId);
     if (!account) throw new Error('No account for this number');
     await createSession(phone);
-    hydrated.current = false;
-    dispatch({ type: 'signedIn', account });
+    await ensureCatalog();
+    enter(account, userId);
     return account;
-  }, []);
+  }, [checkVerified, loadAccountFor, ensureCatalog, enter]);
 
   /** Called after a successful OTP check for a new user. New users start with no cars. */
-  const register = useCallback(async (phone: string, name: string) => {
-    const account: AccountData = {
+  const register = useCallback(async (phone: string, name: string, userId: string = `local:${phone}`) => {
+    checkVerified(phone);
+    // Firebase mode: if this number already has a profile, sign in to it instead of overwriting it.
+    const existing = repo && isFirebaseUid(userId) ? await loadAccountFor(phone, userId) : null;
+    const account: AccountData = existing ?? {
       user: { phone, name: name.trim(), createdAt: new Date().toISOString() },
       cars: [],
       addresses: [],
       orders: [],
     };
-    await saveAccount(account);
+    if (!existing) {
+      if (repo && isFirebaseUid(userId)) {
+        try {
+          await repo.createUser(userId, account.user);
+        } catch (e) {
+          throw new Error(firestoreMessage(e));
+        }
+      }
+      await saveAccount(account);
+    }
     await createSession(phone);
-    hydrated.current = false;
-    dispatch({ type: 'signedIn', account });
+    await ensureCatalog();
+    setJustRegistered(!existing);
+    enter(account, userId);
     return account;
-  }, []);
+  }, [repo, checkVerified, loadAccountFor, ensureCatalog, enter]);
 
   const signOut = useCallback(async () => {
+    // Stop the live listeners first: once Firebase signs out, the rules reject them.
+    uidRef.current = null;
+    stopListening.current?.();
+    stopListening.current = null;
+    await getPhoneAuth().signOut().catch(() => undefined);
     await clearSession();
+    remoteRef.current = null;
+    loadedRef.current = null;
+    setAuthUid(null);
+    setSyncError(null);
+    setJustRegistered(false);
     dispatch({ type: 'signedOut' });
   }, []);
 
@@ -146,6 +339,9 @@ function useAppModel() {
     });
     return id;
   }, []);
+
+  const clearSyncError = useCallback(() => setSyncError(null), []);
+  const clearJustRegistered = useCallback(() => setJustRegistered(false), []);
 
   const updateDraft = useCallback((patch: Partial<BookingDraft>) => dispatch({ type: 'draft', patch }), []);
   const startBooking = useCallback((serviceId: ServiceId) => dispatch({ type: 'resetDraft', serviceId }), []);
@@ -196,6 +392,17 @@ function useAppModel() {
   return useMemo(
     () => ({
       ...state,
+      uid: authUid,
+      authMode: getPhoneAuth().mode,
+      /** Where the account is saved: Firestore in the development build, the phone otherwise. */
+      dataSource: (repo && isFirebaseUid(authUid) ? 'firestore' : 'device') as 'firestore' | 'device',
+      catalogSource,
+      syncError,
+      clearSyncError,
+      /** True right after sign-up, until the first car is added. */
+      justRegistered,
+      /** Clears the sign-up confirmation (called once the first car is saved). */
+      clearJustRegistered,
       restoreSession,
       accountExists,
       signIn,
@@ -209,7 +416,7 @@ function useAppModel() {
       placeOrder,
       setOrderStatus,
     }),
-    [state, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus],
+    [state, authUid, repo, catalogSource, syncError, clearSyncError, justRegistered, clearJustRegistered, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus],
   );
 }
 

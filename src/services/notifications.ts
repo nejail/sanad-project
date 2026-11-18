@@ -49,7 +49,8 @@ export async function notify(title: string, body: string, seconds = 0): Promise<
           : null,
     });
     return true;
-  } catch {
+  } catch (e) {
+    console.warn('[notifications] could not show notification', e);
     return false;
   }
 }

@@ -274,10 +274,11 @@ export function Badge({ label, tone = 'info' }: { label: string; tone?: 'info' |
   );
 }
 
-export function Banner({ text, tone = 'info', icon = 'information-circle-outline' }: { text: string; tone?: 'info' | 'danger'; icon?: IconName }) {
-  const c = tone === 'danger' ? colors.danger : colors.primary;
+export function Banner({ text, tone = 'info', icon = 'information-circle-outline' }: { text: string; tone?: 'info' | 'success' | 'danger'; icon?: IconName }) {
+  const c = tone === 'danger' ? colors.danger : tone === 'success' ? colors.success : colors.primary;
+  const bg = tone === 'danger' ? colors.dangerSoft : tone === 'success' ? colors.successSoft : colors.primarySoft;
   return (
-    <View style={[styles.banner, { borderColor: c, backgroundColor: tone === 'danger' ? colors.dangerSoft : colors.primarySoft }]}>
+    <View style={[styles.banner, { borderColor: c, backgroundColor: bg }]}>
       <Ionicons name={icon} size={18} color={c} />
       <Text style={{ color: colors.text, flex: 1, fontSize: 13 }}>{text}</Text>
     </View>

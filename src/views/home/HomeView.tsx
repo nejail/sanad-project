@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -7,24 +7,32 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Logo } from '../../components/Logo';
 import { IconName, IconTile } from '../../components/ui';
-import { HOME_SERVICE_ORDER, getService } from '../../models/catalog';
+import { getService, homeServiceIds } from '../../models/catalog';
 import { isFirstWashFree } from '../../models/pricing';
 import { ServiceId } from '../../models/types';
 import { RootStackParamList } from '../../navigation/types';
+import { ensureNotificationPermission } from '../../services/notifications';
 import { useAccount, useApp } from '../../viewModels/AppContext';
 import { colors, font } from '../../theme';
 
 /** 03 Home: greeting, promo, the user's registered cars, and the six services. */
 export default function HomeView() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const { startBooking } = useApp();
+
+  // Ask for notification permission once the driver is signed in, so booking updates can show.
+  // (Expo Go asked earlier for the OTP notification; with Firebase SMS sign-in nothing asked before.)
+  useEffect(() => {
+    ensureNotificationPermission().catch((e) => console.warn('[notifications] permission request failed', e));
+  }, []);
+  const { startBooking } = useApp(); // re-renders when the catalogue loads from Firestore
   const { user, cars, orders } = useAccount();
   const firstWashFree = isFirstWashFree(orders);
   const active = orders.find((o) => o.status === 'confirmed' || o.status === 'on_the_way' || o.status === 'arrived');
 
   const open = (id: ServiceId) => {
     startBooking(id);
-    nav.navigate('Service', { serviceId: id });
+    // Location comes first, so the nearest technician and garage are known before choosing options.
+    nav.navigate('Location');
   };
 
   return (
@@ -88,7 +96,7 @@ export default function HomeView() {
 
         <Text style={[font.h3, { marginTop: 8 }]}>Services</Text>
         <View style={styles.grid}>
-          {HOME_SERVICE_ORDER.map((id) => {
+          {homeServiceIds().map((id) => {
             const s = getService(id);
             const danger = s.accent === 'danger';
             return (
