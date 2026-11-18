@@ -9,6 +9,7 @@ import { Logo } from '../../components/Logo';
 import { IconName, IconTile } from '../../components/ui';
 import { getService, homeServiceIds } from '../../models/catalog';
 import { isFirstWashFree } from '../../models/pricing';
+import { STATUS_LABEL, isActiveStatus } from '../../models/tracking';
 import { ServiceId } from '../../models/types';
 import { RootStackParamList } from '../../navigation/types';
 import { ensureNotificationPermission } from '../../services/notifications';
@@ -27,7 +28,7 @@ export default function HomeView() {
   const { startBooking } = useApp(); // re-renders when the catalogue loads from Firestore
   const { user, cars, orders } = useAccount();
   const firstWashFree = isFirstWashFree(orders);
-  const active = orders.find((o) => o.status === 'confirmed' || o.status === 'on_the_way' || o.status === 'arrived');
+  const active = orders.find((o) => isActiveStatus(o.status));
 
   const open = (id: ServiceId) => {
     startBooking(id);
@@ -70,7 +71,7 @@ export default function HomeView() {
             <Ionicons name="navigate-circle-outline" size={22} color={colors.primary} />
             <View style={{ flex: 1 }}>
               <Text style={{ color: colors.text, fontWeight: '700' }}>{active.title}</Text>
-              <Text style={font.small}>#{active.id} · tap to track</Text>
+              <Text style={font.small}>#{active.id} · {STATUS_LABEL[active.status]} · tap to track</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
           </Pressable>

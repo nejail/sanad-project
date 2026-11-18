@@ -2,7 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { orderTitle } from '../models/catalog';
 import { buildQuote, isFirstWashFree } from '../models/pricing';
 import { DEMO_ADDRESSES, DEMO_CARS, DEMO_ORDERS, DEMO_PHONE, DEMO_USER } from '../models/seed';
-import { Address, BookingDraft, Car, Order, OrderStatus, ServiceId } from '../models/types';
+import { withStatus } from '../models/tracking';
+import { Address, BookingDraft, Car, Order, OrderStatus, Provider, ServiceId } from '../models/types';
 import { getPhoneAuth, isVerifiedNumber } from '../services/auth';
 import { CatalogSource, loadCatalog } from '../services/catalogRepo';
 import { FirestoreRepo, RemoteAccount, firestoreMessage, getFirestoreApi, sameRemote } from '../services/firestoreRepo';
@@ -88,6 +89,9 @@ function useAppModel() {
   const [justRegistered, setJustRegistered] = useState(false);
   // True when the driver chose "Skip for now" on Add Your First Car (until sign out or the app restarts).
   const [skippedFirstCar, setSkippedFirstCar] = useState(false);
+  // Provider Mode test on one phone: new orders wait for a technician to accept them in Provider Mode
+  // instead of the prototype simulation (V2 feature 4).
+  const [providerTestMode, setProviderTestMode] = useState(false);
   // Stops the live Firestore listeners; called before signing out so they are not rejected.
   const stopListening = useRef<(() => void) | null>(null);
 
@@ -360,6 +364,22 @@ function useAppModel() {
     if (!a || !d.serviceId || !d.optionId || !d.carId || !d.address) throw new Error('Booking is incomplete');
     const car = a.cars.find((c) => c.id === d.carId);
     const promoApplied = d.serviceId === 'carwash' && isFirstWashFree(a.orders);
+    const createdAt = new Date().toISOString();
+    const dispatchMode: Order['dispatch'] = providerTestMode ? 'provider' : 'simulated';
+    const base = d.providerBase ? { id: d.providerBase.id, name: d.providerBase.name, coords: d.providerBase.coords, phone: d.providerBase.phone } : undefined;
+    // The prototype technician (simulated); with Provider Mode the real technician's details are added when they accept.
+    const provider: Provider = dispatchMode === 'simulated'
+      ? {
+        name: 'Ahmed Al-Mansouri',
+        rating: 4.9,
+        vehicle: d.serviceId === 'emergency' ? 'Flatbed tow truck' : 'Toyota Hilux service van',
+        vehiclePlate: d.serviceId === 'emergency' ? '48213' : '61570',
+        verified: true,
+        phone: d.providerBase?.phone ?? '+97455550123',
+        base,
+        etaMin: d.providerBase?.etaMin,
+      }
+      : { name: 'Waiting for a technician', rating: 0, vehicle: '', phone: '', base, etaMin: d.providerBase?.etaMin };
     const order: Order = {
       id: `SND-${Math.max(1042, ...a.orders.map((o) => Number(o.id.replace('SND-', '')) || 0)) + 1}`,
       serviceId: d.serviceId,
@@ -375,25 +395,46 @@ function useAppModel() {
       notes: d.notes,
       photoUri: d.photoUri,
       status: 'confirmed',
-      createdAt: new Date().toISOString(),
+      statusHistory: [{ status: 'confirmed', at: createdAt }],
+      createdAt,
       towTo: d.serviceId === 'emergency' && d.optionId === 'towing' ? d.towTo : undefined,
-      provider: {
-        name: 'Ahmed Al-Mansouri',
-        rating: 4.9,
-        vehicle: d.serviceId === 'emergency' ? 'Flatbed tow truck' : 'Toyota Hilux service van',
-        phone: d.providerBase?.phone ?? '+97455550123',
-        base: d.providerBase ? { id: d.providerBase.id, name: d.providerBase.name, coords: d.providerBase.coords, phone: d.providerBase.phone } : undefined,
-        etaMin: d.providerBase?.etaMin,
-      },
+      provider,
+      dispatch: dispatchMode,
+      customerName: a.user.name,
+      customerPhone: a.user.phone,
     };
     dispatch({ type: 'account', update: (acc) => ({ ...acc, orders: [order, ...acc.orders] }) });
     return order;
-  }, [state.account, state.draft]);
+  }, [state.account, state.draft, providerTestMode]);
 
+  /** Moves an order to a new status and records when (statusHistory). */
   const setOrderStatus = useCallback((id: string, status: OrderStatus) => {
+    const at = new Date().toISOString();
     dispatch({
       type: 'account',
-      update: (a) => ({ ...a, orders: a.orders.map((o) => (o.id === id ? { ...o, status } : o)) }),
+      update: (a) => ({
+        ...a,
+        orders: a.orders.map((o) =>
+          o.id === id && o.status !== status ? { ...withStatus(o, status, at), ...(status === 'accepted' ? { acceptedAt: at } : {}) } : o,
+        ),
+      }),
+    });
+  }, []);
+
+  /**
+   * Provider Mode on this phone (no Firestore): the technician accepts one of the phone's own orders,
+   * which puts their details on the order exactly as a real acceptance would.
+   */
+  const acceptOrderOnDevice = useCallback((id: string, provider: Provider) => {
+    const at = new Date().toISOString();
+    dispatch({
+      type: 'account',
+      update: (a) => ({
+        ...a,
+        orders: a.orders.map((o) =>
+          o.id === id && o.status === 'confirmed' ? { ...withStatus(o, 'accepted', at), acceptedAt: at, provider: { ...provider, base: o.provider.base, etaMin: o.provider.etaMin } } : o,
+        ),
+      }),
     });
   }, []);
 
@@ -426,8 +467,12 @@ function useAppModel() {
       startBooking,
       placeOrder,
       setOrderStatus,
+      acceptOrderOnDevice,
+      /** When on, new orders wait for Provider Mode on this phone instead of the simulation. */
+      providerTestMode,
+      setProviderTestMode,
     }),
-    [state, authUid, repo, catalogSource, syncError, clearSyncError, justRegistered, clearJustRegistered, skippedFirstCar, skipFirstCar, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus],
+    [state, authUid, repo, catalogSource, syncError, clearSyncError, justRegistered, clearJustRegistered, skippedFirstCar, skipFirstCar, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus, acceptOrderOnDevice, providerTestMode],
   );
 }
 

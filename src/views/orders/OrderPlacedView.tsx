@@ -14,7 +14,7 @@ export default function OrderPlacedView({ navigation, route }: ScreenProps<'Orde
   const order = orders.find((o) => o.id === route.params.orderId);
 
   useEffect(() => {
-    if (order) notify('Order placed', `#${order.id} ${order.title}. Your technician will be notified shortly.`);
+    if (order) notify('Request sent', `#${order.id} ${order.title}. We will let you know as soon as a technician accepts.`);
   }, []);
 
   if (!order) return <Screen title="Order"><Text style={font.body}>Order not found.</Text></Screen>;
@@ -33,8 +33,8 @@ export default function OrderPlacedView({ navigation, route }: ScreenProps<'Orde
         <View style={styles.check}>
           <Ionicons name="checkmark" size={36} color={colors.success} />
         </View>
-        <Text style={[font.title, { fontSize: 26 }]}>Order Placed!</Text>
-        <Text style={font.body}>Your technician will be notified shortly</Text>
+        <Text style={[font.title, { fontSize: 26 }]}>Request Sent!</Text>
+        <Text style={[font.body, { textAlign: 'center' }]}>We are finding a technician. You will see clearly when one accepts.</Text>
       </View>
       <Card style={{ gap: 10 }}>
         <Row label="Order ID" value={`#${order.id}`} />
