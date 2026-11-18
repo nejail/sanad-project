@@ -30,7 +30,16 @@ Sprint 4 task prompts for teammates: [docs/prompts](docs/prompts).
 
 ## Version 2 (after Sprint 5 user testing)
 
-The tow price shows the distance from the first price screen, a large **Enter Location Manually** button appears when GPS fails, the SMS wait is explained, new drivers can **Skip for now** on Add Car, Track Order shows a clear **Accepted** step with verified technician details and a **Demo Mode** badge, and **Provider Mode** (Profile) lets a technician accept a job and update its status. Car photos upload to Cloud Storage, notifications arrive on acceptance and arrival, and there is an Android build. Details, checks and setup: [docs/version-2.md](docs/version-2.md), [docs/android-build.md](docs/android-build.md).
+Nasser's Version 2 features: the tow price shows the distance from the first price screen, a large **Enter Location Manually** button appears when GPS fails, the SMS wait is explained, new drivers can **Skip for now** on Add Car, Track Order shows a clear **Accepted** step with the technician's details and a **Demo Mode** badge, and **Provider Mode** (Profile) lets a technician accept a job and update its status. The driver gets in-app notifications when the technician accepts, sets off and arrives, and the car photo is uploaded to Cloud Storage.
+
+Not working yet:
+
+- **Provider Mode on two phones** needs orders saved in Firestore (Hassan's feature 5). Until then it is tested on one phone, with **Send my new orders to Provider Mode** on.
+- **Push notifications with the app closed** are coded but not set up: they need an EAS project id (`npx eas init`) and, on iOS, a paid Apple Developer account. Without them no push is sent.
+- **Android:** the EAS build setup is in place (`npm run build:android`), but it has not been verified on an Android phone yet.
+- **Car photo upload** needs Cloud Storage enabled in the Firebase console, `firebase/storage.rules` published and a fresh development build. Until feature 5, the photo link is saved only on the phone.
+
+Hassan's features (orders in Firestore, provider matching, live tracking, prices from Firestore) come next.
 
 ```bash
 npm run add:provider -- --phone 55550123 --name "Ahmed" --dry-run   # register a technician for Provider Mode (admin)
