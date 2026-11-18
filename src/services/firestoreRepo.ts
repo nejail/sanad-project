@@ -28,10 +28,14 @@ export interface StoredDoc {
   data: Record<string, unknown>;
 }
 
-/** One write inside a batch. */
+/** One write inside a batch. 'update' changes only the given fields of an existing document. */
 export type WriteOp =
   | { kind: 'set'; path: string; data: Record<string, unknown> }
+  | { kind: 'update'; path: string; data: Record<string, unknown> }
   | { kind: 'delete'; path: string };
+
+/** An equality filter for a collection query, e.g. ['providerId', '==', null]. */
+export type QueryFilter = [field: string, op: '==', value: unknown];
 
 /** The part of the Firestore SDK that SANAD needs. The real one wraps React Native Firebase. */
 export interface FirestoreApi {
@@ -45,6 +49,8 @@ export interface FirestoreApi {
   onDoc(path: string, next: (data: Record<string, unknown> | null) => void, error: (e: Error) => void): () => void;
   /** Live updates for a whole collection. Returns the unsubscribe function. */
   onCollection(collectionPath: string, next: (docs: StoredDoc[]) => void, error: (e: Error) => void): () => void;
+  /** Live updates for the documents in a collection that match every filter. Returns the unsubscribe function. */
+  onQuery(collectionPath: string, filters: QueryFilter[], next: (docs: StoredDoc[]) => void, error: (e: Error) => void): () => void;
   /** Makes a Firestore GeoPoint. */
   geoPoint(latitude: number, longitude: number): unknown;
   /** Makes a Firestore Timestamp from an ISO date string. */
@@ -284,6 +290,7 @@ export function createFirestoreApi(): FirestoreApi {
       const batch = fs.writeBatch(db);
       for (const op of ops) {
         if (op.kind === 'set') batch.set(fs.doc(db, op.path), op.data);
+        else if (op.kind === 'update') batch.update(fs.doc(db, op.path), op.data);
         else batch.delete(fs.doc(db, op.path));
       }
       await batch.commit();
@@ -293,6 +300,10 @@ export function createFirestoreApi(): FirestoreApi {
     },
     onCollection(path, next, error) {
       return fs.onSnapshot(fs.collection(db, path), (snap: { docs: { id: string; data(): Record<string, unknown> }[] }) => next(asDocs(snap)), error);
+    },
+    onQuery(path, filters, next, error) {
+      const q = fs.query(fs.collection(db, path), ...filters.map(([field, op, value]) => fs.where(field, op, value)));
+      return fs.onSnapshot(q, (snap: { docs: { id: string; data(): Record<string, unknown> }[] }) => next(asDocs(snap)), error);
     },
     geoPoint: (latitude, longitude) => new fs.GeoPoint(latitude, longitude),
     timestamp: (iso) => fs.Timestamp.fromDate(new Date(iso)),

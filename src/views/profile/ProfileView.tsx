@@ -21,6 +21,7 @@ export default function ProfileView() {
     { icon: 'create-outline', title: 'Edit Profile', sub: 'Update your information', onPress: () => soon('Edit Profile') },
     { icon: 'location-outline', title: 'My Addresses', sub: 'Manage saved locations', onPress: () => nav.navigate('MyAddresses') },
     { icon: 'card-outline', title: 'Payment Methods', sub: 'Coming soon', onPress: () => soon('Payment Methods') },
+    { icon: 'construct-outline', title: 'Provider Mode', sub: 'Accept jobs and update their status as a technician', onPress: () => nav.navigate('ProviderJobs'), testID: 'open-provider-mode' },
     { icon: 'flask-outline', title: 'Technology Feasibility Tests', sub: 'Run the device checks for this prototype', onPress: () => nav.navigate('FeasibilityTests'), testID: 'open-feasibility' },
     { icon: 'help-circle-outline', title: 'Help & Support', sub: 'Get assistance', onPress: () => soon('Help & Support') },
     { icon: 'information-circle-outline', title: 'About SANAD', sub: 'Version 0.4 (Sprint 4)', onPress: () => soon('About SANAD') },

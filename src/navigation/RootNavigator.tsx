@@ -26,6 +26,8 @@ import TrackOrderView from '../views/orders/TrackOrderView';
 import MyAddressesView from '../views/profile/MyAddressesView';
 import AddAddressView from '../views/profile/AddAddressView';
 import FeasibilityTestsView from '../views/profile/FeasibilityTestsView';
+import ProviderJobsView from '../views/provider/ProviderJobsView';
+import ProviderJobView from '../views/provider/ProviderJobView';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -100,6 +102,8 @@ export default function RootNavigator() {
             <Stack.Screen name="MyAddresses" component={MyAddressesView} />
             <Stack.Screen name="AddAddress" component={AddAddressView} />
             <Stack.Screen name="FeasibilityTests" component={FeasibilityTestsView} />
+            <Stack.Screen name="ProviderJobs" component={ProviderJobsView} />
+            <Stack.Screen name="ProviderJob" component={ProviderJobView} />
           </Stack.Group>
         )}
       </Stack.Navigator>

@@ -56,7 +56,8 @@
     "prebuild": "expo prebuild --clean --platform ios",
     "prebuild:android": "expo prebuild --clean --platform android",
     "go": "expo start --go",
-    "seed:services": "tsx scripts/seed-services.ts"
+    "seed:services": "tsx scripts/seed-services.ts",
+    "add:provider": "tsx scripts/add-provider.ts"
   },
   "private": true,
   "jest": {

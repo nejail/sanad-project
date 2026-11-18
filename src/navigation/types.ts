@@ -30,6 +30,9 @@ export type RootStackParamList = {
   MyAddresses: undefined;
   AddAddress: undefined;
   FeasibilityTests: undefined;
+  // Provider Mode (technician side)
+  ProviderJobs: undefined;
+  ProviderJob: { orderId: string };
 };
 
 export type ScreenProps<T extends keyof RootStackParamList> = NativeStackScreenProps<RootStackParamList, T>;
