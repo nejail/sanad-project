@@ -2,17 +2,16 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Banner, Chip, Field, PrimaryButton, Screen, SectionLabel } from '../../components/ui';
-import { isValidPlate, isValidYear, normalizePlate } from '../../models/validation';
+import { CAR_COLORS, OTHER_COLOR, isValidPlate, isValidYear, normalizePlate, resolveCarColor } from '../../models/validation';
 import { ScreenProps } from '../../navigation/types';
 import { useAccount, useApp } from '../../viewModels/AppContext';
 import { colors } from '../../theme';
 
-const COLORS = ['White', 'Black', 'Silver', 'Gray', 'Red', 'Blue', 'Gold'];
 const FUELS = ['Super 91', 'Premium 95', 'Diesel', 'Electric'];
 
 /** 06 Add Car and 02d Add Your First Car (same form, different title and next step). */
 export default function AddCarView({ navigation, route }: ScreenProps<'AddFirstCar' | 'AddCar'>) {
-  const { addCar, updateDraft } = useApp();
+  const { addCar, updateDraft, justRegistered, clearJustRegistered } = useApp();
   const { cars, user } = useAccount();
   const first = route.name === 'AddFirstCar';
   const fromBooking = route.name === 'AddCar' && route.params?.fromBooking;
@@ -22,6 +21,7 @@ export default function AddCarView({ navigation, route }: ScreenProps<'AddFirstC
   const [year, setYear] = useState('');
   const [plate, setPlate] = useState('');
   const [color, setColor] = useState('White');
+  const [otherColor, setOtherColor] = useState('');
   const [fuel, setFuel] = useState('Super 91');
   const [isDefault, setIsDefault] = useState(true);
   const [touched, setTouched] = useState(false);
@@ -31,6 +31,7 @@ export default function AddCarView({ navigation, route }: ScreenProps<'AddFirstC
     model: model.trim() ? undefined : 'Required',
     year: isValidYear(year) ? undefined : 'Enter a valid year',
     plate: isValidPlate(plate) ? undefined : 'Enter the plate number',
+    color: resolveCarColor(color, otherColor) ? undefined : 'Type your car color',
   };
   const valid = !Object.values(errors).some(Boolean);
 
@@ -38,11 +39,12 @@ export default function AddCarView({ navigation, route }: ScreenProps<'AddFirstC
     setTouched(true);
     if (!valid) return;
     const id = addCar({
-      make: make.trim(), model: model.trim(), year, plate: normalizePlate(plate), color,
+      make: make.trim(), model: model.trim(), year, plate: normalizePlate(plate), color: resolveCarColor(color, otherColor) ?? color,
       fuel: fuel === 'Electric' ? 'Electric' : fuel === 'Diesel' ? 'Diesel' : 'Gasoline',
       isDefault: isDefault || cars.length === 0, lastService: 'No services yet',
     });
     if (first) {
+      clearJustRegistered();
       navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
     } else {
       if (fromBooking) updateDraft({ carId: id });
@@ -56,7 +58,11 @@ export default function AddCarView({ navigation, route }: ScreenProps<'AddFirstC
       back={!first}
       footer={<PrimaryButton label={first ? 'Add Car and Continue' : 'Add Car'} onPress={save} testID="add-car" />}
     >
-      {first ? <Banner icon="car-sport-outline" text={`Welcome ${user.name}! Add your car so we know what we're servicing.`} /> : null}
+      {first && justRegistered ? (
+        <Banner tone="success" icon="checkmark-circle" text={`Sign up successful! Welcome to SANAD, ${user.name}. Now add your car so we know what we're servicing.`} />
+      ) : first ? (
+        <Banner icon="car-sport-outline" text={`Welcome ${user.name}! Add your car so we know what we're servicing.`} />
+      ) : null}
       <View style={styles.grid}>
         <Field style={styles.half} label="Make" value={make} onChangeText={setMake} placeholder="Toyota" error={touched ? errors.make : undefined} testID="car-make" />
         <Field style={styles.half} label="Model" value={model} onChangeText={setModel} placeholder="Land Cruiser" error={touched ? errors.model : undefined} testID="car-model" />
@@ -67,8 +73,18 @@ export default function AddCarView({ navigation, route }: ScreenProps<'AddFirstC
       </View>
       <SectionLabel>Color</SectionLabel>
       <View style={styles.chips}>
-        {COLORS.map((c) => <Chip key={c} label={c} selected={color === c} onPress={() => setColor(c)} />)}
+        {CAR_COLORS.map((c) => <Chip key={c} label={c} selected={color === c} onPress={() => setColor(c)} />)}
       </View>
+      {color === OTHER_COLOR ? (
+        <Field
+          label="Your car color"
+          value={otherColor}
+          onChangeText={setOtherColor}
+          placeholder="e.g. Matte green, Pearl white, Two-tone"
+          error={touched ? errors.color : undefined}
+          testID="car-color-other"
+        />
+      ) : null}
       <SectionLabel>Fuel Type</SectionLabel>
       <View style={styles.chips}>
         {FUELS.map((f) => <Chip key={f} label={f} selected={fuel === f} onPress={() => setFuel(f)} />)}

@@ -84,6 +84,8 @@ function useAppModel() {
   const catalogLoaded = useRef(false);
   // Short message shown when saving to Firestore fails (see SyncToast).
   const [syncError, setSyncError] = useState<string | null>(null);
+  // True right after a new account is created, so Add Your First Car can confirm the sign-up.
+  const [justRegistered, setJustRegistered] = useState(false);
   // Stops the live Firestore listeners; called before signing out so they are not rejected.
   const stopListening = useRef<(() => void) | null>(null);
 
@@ -281,6 +283,7 @@ function useAppModel() {
     }
     await createSession(phone);
     await ensureCatalog();
+    setJustRegistered(!existing);
     enter(account, userId);
     return account;
   }, [repo, checkVerified, loadAccountFor, ensureCatalog, enter]);
@@ -296,6 +299,7 @@ function useAppModel() {
     loadedRef.current = null;
     setAuthUid(null);
     setSyncError(null);
+    setJustRegistered(false);
     dispatch({ type: 'signedOut' });
   }, []);
 
@@ -337,6 +341,7 @@ function useAppModel() {
   }, []);
 
   const clearSyncError = useCallback(() => setSyncError(null), []);
+  const clearJustRegistered = useCallback(() => setJustRegistered(false), []);
 
   const updateDraft = useCallback((patch: Partial<BookingDraft>) => dispatch({ type: 'draft', patch }), []);
   const startBooking = useCallback((serviceId: ServiceId) => dispatch({ type: 'resetDraft', serviceId }), []);
@@ -394,6 +399,10 @@ function useAppModel() {
       catalogSource,
       syncError,
       clearSyncError,
+      /** True right after sign-up, until the first car is added. */
+      justRegistered,
+      /** Clears the sign-up confirmation (called once the first car is saved). */
+      clearJustRegistered,
       restoreSession,
       accountExists,
       signIn,
@@ -407,7 +416,7 @@ function useAppModel() {
       placeOrder,
       setOrderStatus,
     }),
-    [state, authUid, repo, catalogSource, syncError, clearSyncError, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus],
+    [state, authUid, repo, catalogSource, syncError, clearSyncError, justRegistered, clearJustRegistered, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus],
   );
 }
 

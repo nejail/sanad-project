@@ -31,7 +31,8 @@ export default function HomeView() {
 
   const open = (id: ServiceId) => {
     startBooking(id);
-    nav.navigate('Service', { serviceId: id });
+    // Location comes first, so the nearest technician and garage are known before choosing options.
+    nav.navigate('Location');
   };
 
   return (

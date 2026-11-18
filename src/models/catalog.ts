@@ -89,19 +89,19 @@ export const SERVICES: ServiceDefinition[] = [
   },
   {
     id: 'emergency',
-    title: 'Emergency 24/7',
-    shortTitle: 'Emergency 24/7',
-    fromLabel: 'from 100 QAR',
+    title: 'Emergency & Towing 24/7',
+    shortTitle: 'Emergency & Towing',
+    fromLabel: 'Towing, lockout, help',
     icon: 'warning-outline',
     accent: 'danger',
     prompt: 'What happened?',
     pricing: 'towing',
-    notesLabel: 'Where are you? (optional)',
-    notesPlaceholder: 'e.g. Salwa Road, near exit 12',
+    notesLabel: 'Details (optional)',
+    notesPlaceholder: "e.g. engine stopped, hazard lights on",
     options: [
       { id: 'towing', title: 'Towing', subtitle: 'Base fee + 5 QAR per km', price: 200, priceLabel: '200+', icon: 'car-outline' },
       { id: 'lockout', title: 'Lockout', subtitle: 'Keys locked inside the car', price: 100, priceLabel: '100 QAR', icon: 'key-outline' },
-      { id: 'general', title: 'General Help', subtitle: "Not sure what's wrong", price: 150, priceLabel: '150 QAR', icon: 'help-circle-outline' },
+      { id: 'general', title: 'Unsure', subtitle: "Not sure what's wrong? A technician will check", price: 150, priceLabel: '150 QAR', icon: 'help-circle-outline' },
     ],
   },
 ];
@@ -157,5 +157,6 @@ export function orderTitle(serviceId: ServiceId, optionId: string): string {
   if (serviceId === 'battery') return `Battery ${o.title}`;
   if (serviceId === 'fuel') return `Fuel Delivery · ${o.title}`;
   if (serviceId === 'carwash') return `Car Wash · ${o.title}`;
+  if (serviceId === 'emergency') return `Emergency · ${o.title}`;
   return `${s.shortTitle.replace(' Service', '')} · ${o.title}`;
 }

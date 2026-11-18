@@ -38,9 +38,13 @@ export function buildQuote(input: QuoteInput): Quote {
     }
     case 'towing': {
       if (option.id === 'towing') {
-        const km = Math.max(0, input.distanceKm ?? 2);
         lines.push({ label: 'Towing base fee', amount: option.price });
-        lines.push({ label: `Distance (${km.toFixed(1)} km × ${TOWING_PER_KM} QAR)`, amount: round2(km * TOWING_PER_KM) });
+        // The distance comes from the nearest garage, found automatically on the review screen.
+        // Until then only the base fee is shown, marked as an estimate.
+        if (input.distanceKm != null) {
+          const km = Math.max(0, input.distanceKm);
+          lines.push({ label: `Distance to garage (${km.toFixed(1)} km × ${TOWING_PER_KM} QAR)`, amount: round2(km * TOWING_PER_KM) });
+        }
         isEstimate = true;
       } else {
         lines.push({ label: option.title, amount: option.price });
