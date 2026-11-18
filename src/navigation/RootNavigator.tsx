@@ -66,10 +66,12 @@ function Tabs() {
  * Entry flow agreed in the Sprint 2 supervision meeting:
  *  Splash -> (session found) Home with registered cars loaded
  *  Splash -> (no session) Sign in / Register -> OTP -> new user: Add First Car, returning user: Home
+ *  Add First Car -> Skip for now -> Home (the car is asked for again when booking)
  */
 export default function RootNavigator() {
-  const { status, account } = useApp();
-  const needsFirstCar = status === 'signedIn' && (account?.cars.length ?? 0) === 0;
+  const { status, account, skippedFirstCar } = useApp();
+  // A driver without a car starts on Add Your First Car, unless they chose "Skip for now".
+  const needsFirstCar = status === 'signedIn' && (account?.cars.length ?? 0) === 0 && !skippedFirstCar;
 
   return (
     <NavigationContainer theme={theme}>
