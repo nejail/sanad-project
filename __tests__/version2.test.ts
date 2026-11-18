@@ -30,3 +30,19 @@ describe('tow price shown from the first price screen (V2 feature 1)', () => {
     expect(towOptionLabel(buildQuote({ serviceId: 'emergency', optionId: 'towing' }), false, '200+')).toBe('200+');
   });
 });
+
+import { SMS_TYPICAL_WAIT_SECONDS, smsWaitHint } from '../src/models/otp';
+
+describe('SMS wait guidance (V2 feature 3)', () => {
+  it('says a short wait is normal at first', () => {
+    const hint = smsWaitHint(5);
+    expect(hint.late).toBe(false);
+    expect(hint.detail).toMatch(/within a minute/);
+  });
+  it('gives practical tips once the wait is longer than usual', () => {
+    expect(smsWaitHint(SMS_TYPICAL_WAIT_SECONDS - 1).late).toBe(false);
+    const hint = smsWaitHint(SMS_TYPICAL_WAIT_SECONDS);
+    expect(hint.late).toBe(true);
+    expect(hint.detail).toMatch(/Resend code/);
+  });
+});

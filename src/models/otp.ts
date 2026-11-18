@@ -84,3 +84,26 @@ export function otpErrorMessage(r: VerifyResult): string {
 }
 
 export const otpService = new LocalOtpService();
+
+/** Average SMS delivery time measured in the Sprint 5 user tests (29 to 61 seconds). */
+export const SMS_TYPICAL_WAIT_SECONDS = 45;
+
+/**
+ * Guidance shown while the driver waits for the SMS (V2 feature 3). In Sprint 5 the code took
+ * 42 seconds on average, so drivers are told up front that a short wait is normal, and get
+ * practical tips only once the wait is longer than usual. The Resend countdown stays as it is.
+ */
+export function smsWaitHint(secondsWaiting: number): { title: string; detail: string; late: boolean } {
+  if (secondsWaiting < SMS_TYPICAL_WAIT_SECONDS) {
+    return {
+      title: 'Your code is on its way',
+      detail: 'The SMS usually arrives within a minute. Keep this screen open: the code fills in automatically.',
+      late: false,
+    };
+  }
+  return {
+    title: 'Taking longer than usual',
+    detail: 'Check that the number above is correct and that you have signal, then tap Resend code. Your Messages app may also show it.',
+    late: true,
+  };
+}
