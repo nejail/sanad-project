@@ -8,6 +8,7 @@ import { getPhoneAuth, isVerifiedNumber } from '../services/auth';
 import { CatalogSource, loadCatalog } from '../services/catalogRepo';
 import { FirestoreRepo, RemoteAccount, firestoreMessage, getFirestoreApi, sameRemote } from '../services/firestoreRepo';
 import { PHOTO_UPLOAD_FAILED, uploadOrderPhoto } from '../services/photoUpload';
+import { registerPushToken } from '../services/push';
 import { clearSession, createSession, readSession } from '../services/session';
 import { AccountData, loadAccount, saveAccount } from '../services/storage';
 
@@ -93,6 +94,9 @@ function useAppModel() {
   // Provider Mode test on one phone: new orders wait for a technician to accept them in Provider Mode
   // instead of the prototype simulation (V2 feature 4).
   const [providerTestMode, setProviderTestMode] = useState(false);
+  // This phone's Expo push token (null when push is not available on this build), put on each order
+  // so the technician's phone can notify the driver with the app closed (V2 feature 12).
+  const pushToken = useRef<string | null>(null);
   // Stops the live Firestore listeners; called before signing out so they are not rejected.
   const stopListening = useRef<(() => void) | null>(null);
 
@@ -241,6 +245,15 @@ function useAppModel() {
       if (stopListening.current === stop) stopListening.current = null;
     };
   }, [repo, authUid, state.status]);
+
+  // Ask for a push token once signed in (after Home has asked for notification permission).
+  useEffect(() => {
+    if (state.status !== 'signedIn' || !repo) return;
+    const t = setTimeout(() => {
+      registerPushToken().then((token) => { pushToken.current = token; }).catch(() => undefined);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [state.status, repo]);
 
   /**
    * True when this number already has an account.
@@ -403,6 +416,7 @@ function useAppModel() {
       dispatch: dispatchMode,
       customerName: a.user.name,
       customerPhone: a.user.phone,
+      customerPushToken: pushToken.current ?? undefined,
     };
     dispatch({ type: 'account', update: (acc) => ({ ...acc, orders: [order, ...acc.orders] }) });
     // Development build: upload the car photo so the technician can open it (V2 feature 13).

@@ -130,3 +130,28 @@ describe('car photo upload (V2 feature 13)', () => {
     expect(result).toEqual({ path: 'order-photos/uid-1/SND-1050.jpg', url: 'https://storage.test/order-photos/uid-1/SND-1050.jpg' });
   });
 });
+
+import { EXPO_PUSH_URL, pushMessage, sendPush } from '../src/services/push';
+
+describe('push to the driver with the app closed (V2 feature 12)', () => {
+  it('builds the message Expo expects', () => {
+    expect(pushMessage('ExponentPushToken[abc]', 'Request accepted', 'Ahmed accepted', { orderId: 'SND-1' })).toEqual({
+      to: 'ExponentPushToken[abc]', title: 'Request accepted', body: 'Ahmed accepted', sound: 'default', priority: 'high', data: { orderId: 'SND-1' },
+    });
+  });
+  it('sends through Expo, and does nothing without a token', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true });
+    const original = global.fetch;
+    global.fetch = fetchMock as unknown as typeof fetch;
+    try {
+      expect(await sendPush(undefined, 't', 'b')).toBe(false);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(await sendPush('ExponentPushToken[abc]', 'Technician arrived', 'Ahmed has arrived')).toBe(true);
+      expect(fetchMock).toHaveBeenCalledWith(EXPO_PUSH_URL, expect.objectContaining({ method: 'POST' }));
+      fetchMock.mockRejectedValueOnce(new Error('offline'));
+      expect(await sendPush('ExponentPushToken[abc]', 't', 'b')).toBe(false);
+    } finally {
+      global.fetch = original;
+    }
+  });
+});
