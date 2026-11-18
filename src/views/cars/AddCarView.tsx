@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Banner, Chip, Field, PrimaryButton, Screen, SectionLabel } from '../../components/ui';
+import { Banner, Chip, Field, LinkText, PrimaryButton, Screen, SectionLabel } from '../../components/ui';
 import { CAR_COLORS, OTHER_COLOR, isValidPlate, isValidYear, normalizePlate, resolveCarColor } from '../../models/validation';
 import { ScreenProps } from '../../navigation/types';
 import { useAccount, useApp } from '../../viewModels/AppContext';
@@ -11,7 +11,7 @@ const FUELS = ['Super 91', 'Premium 95', 'Diesel', 'Electric'];
 
 /** 06 Add Car and 02d Add Your First Car (same form, different title and next step). */
 export default function AddCarView({ navigation, route }: ScreenProps<'AddFirstCar' | 'AddCar'>) {
-  const { addCar, updateDraft, justRegistered, clearJustRegistered } = useApp();
+  const { addCar, updateDraft, justRegistered, clearJustRegistered, skipFirstCar } = useApp();
   const { cars, user } = useAccount();
   const first = route.name === 'AddFirstCar';
   const fromBooking = route.name === 'AddCar' && route.params?.fromBooking;
@@ -52,11 +52,22 @@ export default function AddCarView({ navigation, route }: ScreenProps<'AddFirstC
     }
   };
 
+  /** Opens Home without a car; booking asks for one at Select Vehicle (Sprint 5: P2 wanted to look around first). */
+  const skip = () => {
+    skipFirstCar();
+    navigation.reset({ index: 0, routes: [{ name: 'Tabs' }] });
+  };
+
   return (
     <Screen
       title={first ? 'Add Your First Car' : 'Add New Car'}
       back={!first}
-      footer={<PrimaryButton label={first ? 'Add Car and Continue' : 'Add Car'} onPress={save} testID="add-car" />}
+      footer={
+        <>
+          <PrimaryButton label={first ? 'Add Car and Continue' : 'Add Car'} onPress={save} testID="add-car" />
+          {first ? <LinkText label="Skip for now" onPress={skip} /> : null}
+        </>
+      }
     >
       {first && justRegistered ? (
         <Banner tone="success" icon="checkmark-circle" text={`Sign up successful! Welcome to SANAD, ${user.name}. Now add your car so we know what we're servicing.`} />

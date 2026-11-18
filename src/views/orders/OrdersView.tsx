@@ -5,15 +5,13 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Badge, Card, IconName, IconTile, Screen } from '../../components/ui';
 import { getService } from '../../models/catalog';
 import { formatQAR } from '../../models/pricing';
+import { STATUS_LABEL, isActiveStatus } from '../../models/tracking';
 import { Order } from '../../models/types';
 import { RootStackParamList } from '../../navigation/types';
 import { useAccount } from '../../viewModels/AppContext';
 import { colors, font } from '../../theme';
 
-const isActive = (o: Order) => o.status !== 'done' && o.status !== 'cancelled';
-const statusLabel: Record<Order['status'], string> = {
-  confirmed: 'Confirmed', on_the_way: 'On the way', arrived: 'Arrived', done: 'Done', cancelled: 'Cancelled',
-};
+const isActive = (o: Order) => isActiveStatus(o.status);
 
 function dateLabel(iso: string) {
   const d = new Date(iso);
@@ -48,7 +46,7 @@ export default function OrdersView() {
             <Text style={font.small}>#{o.id} · {dateLabel(o.createdAt)}</Text>
           </View>
           <View style={{ alignItems: 'flex-end', gap: 4 }}>
-            <Badge label={statusLabel[o.status]} tone={isActive(o) ? 'info' : 'success'} />
+            <Badge label={STATUS_LABEL[o.status]} tone={o.status === 'accepted' ? 'success' : isActive(o) ? 'info' : 'success'} />
             <Text style={{ color: colors.text, fontWeight: '700' }}>{formatQAR(o.quote.total)}</Text>
           </View>
         </Card>

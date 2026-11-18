@@ -2,10 +2,13 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { orderTitle } from '../models/catalog';
 import { buildQuote, isFirstWashFree } from '../models/pricing';
 import { DEMO_ADDRESSES, DEMO_CARS, DEMO_ORDERS, DEMO_PHONE, DEMO_USER } from '../models/seed';
-import { Address, BookingDraft, Car, Order, OrderStatus, ServiceId } from '../models/types';
+import { withStatus } from '../models/tracking';
+import { Address, BookingDraft, Car, Order, OrderStatus, Provider, ServiceId } from '../models/types';
 import { getPhoneAuth, isVerifiedNumber } from '../services/auth';
 import { CatalogSource, loadCatalog } from '../services/catalogRepo';
 import { FirestoreRepo, RemoteAccount, firestoreMessage, getFirestoreApi, sameRemote } from '../services/firestoreRepo';
+import { PHOTO_UPLOAD_FAILED, uploadOrderPhoto } from '../services/photoUpload';
+import { registerPushToken } from '../services/push';
 import { clearSession, createSession, readSession } from '../services/session';
 import { AccountData, loadAccount, saveAccount } from '../services/storage';
 
@@ -86,6 +89,14 @@ function useAppModel() {
   const [syncError, setSyncError] = useState<string | null>(null);
   // True right after a new account is created, so Add Your First Car can confirm the sign-up.
   const [justRegistered, setJustRegistered] = useState(false);
+  // True when the driver chose "Skip for now" on Add Your First Car (until sign out or the app restarts).
+  const [skippedFirstCar, setSkippedFirstCar] = useState(false);
+  // Provider Mode test on one phone: new orders wait for a technician to accept them in Provider Mode
+  // instead of the prototype simulation (V2 feature 4).
+  const [providerTestMode, setProviderTestMode] = useState(false);
+  // This phone's Expo push token (null when push is not available on this build), put on each order
+  // so the technician's phone can notify the driver with the app closed (V2 feature 12).
+  const pushToken = useRef<string | null>(null);
   // Stops the live Firestore listeners; called before signing out so they are not rejected.
   const stopListening = useRef<(() => void) | null>(null);
 
@@ -235,6 +246,15 @@ function useAppModel() {
     };
   }, [repo, authUid, state.status]);
 
+  // Ask for a push token once signed in (after Home has asked for notification permission).
+  useEffect(() => {
+    if (state.status !== 'signedIn' || !repo) return;
+    const t = setTimeout(() => {
+      registerPushToken().then((token) => { pushToken.current = token; }).catch(() => undefined);
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [state.status, repo]);
+
   /**
    * True when this number already has an account.
    * Firebase mode: "does users/{uid} exist" for the signed-in user. Before the code is confirmed
@@ -300,6 +320,7 @@ function useAppModel() {
     setAuthUid(null);
     setSyncError(null);
     setJustRegistered(false);
+    setSkippedFirstCar(false);
     dispatch({ type: 'signedOut' });
   }, []);
 
@@ -342,6 +363,11 @@ function useAppModel() {
 
   const clearSyncError = useCallback(() => setSyncError(null), []);
   const clearJustRegistered = useCallback(() => setJustRegistered(false), []);
+  /** Lets a new driver look around the app before adding a car (V2 feature 11). */
+  const skipFirstCar = useCallback(() => {
+    setJustRegistered(false);
+    setSkippedFirstCar(true);
+  }, []);
 
   const updateDraft = useCallback((patch: Partial<BookingDraft>) => dispatch({ type: 'draft', patch }), []);
   const startBooking = useCallback((serviceId: ServiceId) => dispatch({ type: 'resetDraft', serviceId }), []);
@@ -352,6 +378,22 @@ function useAppModel() {
     if (!a || !d.serviceId || !d.optionId || !d.carId || !d.address) throw new Error('Booking is incomplete');
     const car = a.cars.find((c) => c.id === d.carId);
     const promoApplied = d.serviceId === 'carwash' && isFirstWashFree(a.orders);
+    const createdAt = new Date().toISOString();
+    const dispatchMode: Order['dispatch'] = providerTestMode ? 'provider' : 'simulated';
+    const base = d.providerBase ? { id: d.providerBase.id, name: d.providerBase.name, coords: d.providerBase.coords, phone: d.providerBase.phone } : undefined;
+    // The prototype technician (simulated); with Provider Mode the real technician's details are added when they accept.
+    const provider: Provider = dispatchMode === 'simulated'
+      ? {
+        name: 'Ahmed Al-Mansouri',
+        rating: 4.9,
+        vehicle: d.serviceId === 'emergency' ? 'Flatbed tow truck' : 'Toyota Hilux service van',
+        vehiclePlate: d.serviceId === 'emergency' ? '48213' : '61570',
+        verified: true,
+        phone: d.providerBase?.phone ?? '+97455550123',
+        base,
+        etaMin: d.providerBase?.etaMin,
+      }
+      : { name: 'Waiting for a technician', rating: 0, vehicle: '', phone: '', base, etaMin: d.providerBase?.etaMin };
     const order: Order = {
       id: `SND-${Math.max(1042, ...a.orders.map((o) => Number(o.id.replace('SND-', '')) || 0)) + 1}`,
       serviceId: d.serviceId,
@@ -367,25 +409,58 @@ function useAppModel() {
       notes: d.notes,
       photoUri: d.photoUri,
       status: 'confirmed',
-      createdAt: new Date().toISOString(),
+      statusHistory: [{ status: 'confirmed', at: createdAt }],
+      createdAt,
       towTo: d.serviceId === 'emergency' && d.optionId === 'towing' ? d.towTo : undefined,
-      provider: {
-        name: 'Ahmed Al-Mansouri',
-        rating: 4.9,
-        vehicle: d.serviceId === 'emergency' ? 'Flatbed tow truck' : 'Toyota Hilux service van',
-        phone: d.providerBase?.phone ?? '+97455550123',
-        base: d.providerBase ? { id: d.providerBase.id, name: d.providerBase.name, coords: d.providerBase.coords, phone: d.providerBase.phone } : undefined,
-        etaMin: d.providerBase?.etaMin,
-      },
+      provider,
+      dispatch: dispatchMode,
+      customerName: a.user.name,
+      customerPhone: a.user.phone,
+      customerPushToken: pushToken.current ?? undefined,
     };
     dispatch({ type: 'account', update: (acc) => ({ ...acc, orders: [order, ...acc.orders] }) });
+    // Development build: upload the car photo so the technician can open it (V2 feature 13).
+    const userId = uidRef.current;
+    if (repo && isFirebaseUid(userId) && order.photoUri) {
+      uploadOrderPhoto(userId, order.id, order.photoUri)
+        .then(({ path, url }) =>
+          dispatch({ type: 'account', update: (acc) => ({ ...acc, orders: acc.orders.map((o) => (o.id === order.id ? { ...o, photoPath: path, photoUrl: url } : o)) }) }))
+        .catch((e) => {
+          console.warn('[photo] upload failed', e);
+          setSyncError(PHOTO_UPLOAD_FAILED);
+        });
+    }
     return order;
-  }, [state.account, state.draft]);
+  }, [state.account, state.draft, providerTestMode, repo]);
 
+  /** Moves an order to a new status and records when (statusHistory). */
   const setOrderStatus = useCallback((id: string, status: OrderStatus) => {
+    const at = new Date().toISOString();
     dispatch({
       type: 'account',
-      update: (a) => ({ ...a, orders: a.orders.map((o) => (o.id === id ? { ...o, status } : o)) }),
+      update: (a) => ({
+        ...a,
+        orders: a.orders.map((o) =>
+          o.id === id && o.status !== status ? { ...withStatus(o, status, at), ...(status === 'accepted' ? { acceptedAt: at } : {}) } : o,
+        ),
+      }),
+    });
+  }, []);
+
+  /**
+   * Provider Mode on this phone (no Firestore): the technician accepts one of the phone's own orders,
+   * which puts their details on the order exactly as a real acceptance would.
+   */
+  const acceptOrderOnDevice = useCallback((id: string, provider: Provider) => {
+    const at = new Date().toISOString();
+    dispatch({
+      type: 'account',
+      update: (a) => ({
+        ...a,
+        orders: a.orders.map((o) =>
+          o.id === id && o.status === 'confirmed' ? { ...withStatus(o, 'accepted', at), acceptedAt: at, provider: { ...provider, base: o.provider.base, etaMin: o.provider.etaMin } } : o,
+        ),
+      }),
     });
   }, []);
 
@@ -403,6 +478,9 @@ function useAppModel() {
       justRegistered,
       /** Clears the sign-up confirmation (called once the first car is saved). */
       clearJustRegistered,
+      /** True after "Skip for now" on Add Your First Car, so Home opens without a car. */
+      skippedFirstCar,
+      skipFirstCar,
       restoreSession,
       accountExists,
       signIn,
@@ -415,8 +493,12 @@ function useAppModel() {
       startBooking,
       placeOrder,
       setOrderStatus,
+      acceptOrderOnDevice,
+      /** When on, new orders wait for Provider Mode on this phone instead of the simulation. */
+      providerTestMode,
+      setProviderTestMode,
     }),
-    [state, authUid, repo, catalogSource, syncError, clearSyncError, justRegistered, clearJustRegistered, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus],
+    [state, authUid, repo, catalogSource, syncError, clearSyncError, justRegistered, clearJustRegistered, skippedFirstCar, skipFirstCar, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus, acceptOrderOnDevice, providerTestMode],
   );
 }
 

@@ -71,6 +71,26 @@ export function buildQuote(input: QuoteInput): Quote {
 
 export const formatQAR = (n: number) => `${n.toFixed(2)} QAR`;
 
+/**
+ * Plain-language explanation of a tow price, shown above the price on the first price screen
+ * (Sprint 5: 4 of 10 drivers read the 200 QAR base fee as the final price).
+ * Without a distance yet, it explains the formula with a worked example.
+ */
+export function towPriceExplanation(baseFee: number, km?: number, garageName?: string): string {
+  if (km == null) {
+    const example = 10;
+    return `Towing costs ${baseFee} QAR plus ${TOWING_PER_KM} QAR for every km to the garage. For example, ${example} km costs ${baseFee + example * TOWING_PER_KM} QAR before VAT.`;
+  }
+  const distance = round2(Math.max(0, km) * TOWING_PER_KM);
+  const to = garageName ? ` to ${garageName}` : ' to the nearest garage';
+  return `${baseFee} QAR base fee + ${distance.toFixed(0)} QAR for ${km.toFixed(1)} km${to} = ${(baseFee + distance).toFixed(0)} QAR before VAT.`;
+}
+
+/** Short price for the towing option row, e.g. "≈ 246 QAR" once the distance is known. */
+export function towOptionLabel(quote: Quote, hasDistance: boolean, fallback: string): string {
+  return hasDistance ? `≈ ${Math.round(quote.total)} QAR` : fallback;
+}
+
 /** Great-circle distance in km (used for towing estimates and provider ETA). */
 export function distanceKm(a: Coordinates, b: Coordinates): number {
   const R = 6371;

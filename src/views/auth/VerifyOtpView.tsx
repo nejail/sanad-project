@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Banner, LinkText, PrimaryButton } from '../../components/ui';
-import { OTP_LENGTH } from '../../models/otp';
+import { OTP_LENGTH, smsWaitHint } from '../../models/otp';
 import { formatPhone } from '../../models/validation';
 import { ScreenProps } from '../../navigation/types';
 import { getPhoneAuth } from '../../services/auth';
@@ -24,6 +25,9 @@ export default function VerifyOtpView({ navigation, route }: ScreenProps<'Verify
   const [fallbackCode, setFallbackCode] = useState<string | null>(null);
   const [showCode, setShowCode] = useState(false);
   const [sending, setSending] = useState(false);
+  // When the last SMS was requested, to explain the wait (null until a code has been sent).
+  const [sentAt, setSentAt] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
   const inputRef = useRef<React.ComponentRef<typeof TextInput>>(null);
   const auth = getPhoneAuth();
 
@@ -35,6 +39,7 @@ export default function VerifyOtpView({ navigation, route }: ScreenProps<'Verify
     try {
       const result = await auth.sendCode(phone);
       setCooldown(result.cooldownSeconds);
+      setSentAt(Date.now());
       setFallbackCode(result.localCode ?? null);
       setShowCode(false);
     } catch (e) {
@@ -55,6 +60,16 @@ export default function VerifyOtpView({ navigation, route }: ScreenProps<'Verify
     const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
     return () => clearTimeout(t);
   }, [cooldown]);
+
+  // Ticks once per second while waiting for the SMS, so the hint can change after the usual wait.
+  useEffect(() => {
+    if (sentAt == null) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [sentAt]);
+  const waitHint = auth.mode === 'firebase' && sentAt != null && !sending && !error && code.length === 0
+    ? smsWaitHint(Math.max(0, Math.floor((now - sentAt) / 1000)))
+    : null;
 
   /** Confirms the code, then routes: new user -> Add First Car, returning user -> Home, unknown number -> Register. */
   const verify = async (value = code) => {
@@ -119,6 +134,15 @@ export default function VerifyOtpView({ navigation, route }: ScreenProps<'Verify
       />
       {sending ? <Text style={styles.resend}>{auth.mode === 'firebase' ? 'Sending SMS…' : 'Sending code…'}</Text> : null}
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {waitHint ? (
+        <View style={[styles.wait, waitHint.late && styles.waitLate]} testID="sms-wait-hint">
+          <Ionicons name={waitHint.late ? 'time-outline' : 'chatbubble-ellipses-outline'} size={18} color={waitHint.late ? colors.price : colors.primary} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 13 }}>{waitHint.title}</Text>
+            <Text style={{ color: colors.subtext, fontSize: 12 }}>{waitHint.detail}</Text>
+          </View>
+        </View>
+      ) : null}
       <Text style={styles.resend}>
         Didn't receive a code?{' '}
         {cooldown > 0 ? (
@@ -159,4 +183,6 @@ const styles = StyleSheet.create({
   hidden: { position: 'absolute', opacity: 0, height: 1, width: 1 },
   error: { color: colors.danger, textAlign: 'center', fontSize: 13 },
   resend: { color: colors.muted, textAlign: 'center', fontSize: 13 },
+  wait: { flexDirection: 'row', gap: 10, alignItems: 'flex-start', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  waitLate: { borderColor: colors.price },
 });

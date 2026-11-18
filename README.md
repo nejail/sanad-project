@@ -28,6 +28,24 @@ npx expo start --web  # browser preview (maps, secure store, haptics, Firebase a
 
 Sprint 4 task prompts for teammates: [docs/prompts](docs/prompts).
 
+## Version 2 (after Sprint 5 user testing)
+
+Nasser's Version 2 features: the tow price shows the distance from the first price screen, a large **Enter Location Manually** button appears when GPS fails, the SMS wait is explained, new drivers can **Skip for now** on Add Car, Track Order shows a clear **Accepted** step with the technician's details and a **Demo Mode** badge, and **Provider Mode** (Profile) lets a technician accept a job and update its status. The driver gets in-app notifications when the technician accepts, sets off and arrives, and the car photo is uploaded to Cloud Storage.
+
+Not working yet:
+
+- **Provider Mode on two phones** needs orders saved in Firestore (Hassan's feature 5). Until then it is tested on one phone, with **Send my new orders to Provider Mode** on.
+- **Push notifications with the app closed** are coded but not set up: they need an EAS project id (`npx eas init`) and, on iOS, a paid Apple Developer account. Without them no push is sent.
+- **Android:** the EAS build setup is in place (`npm run build:android`), but it has not been verified on an Android phone yet.
+- **Car photo upload** needs Cloud Storage enabled in the Firebase console, `firebase/storage.rules` published and a fresh development build. Until feature 5, the photo link is saved only on the phone.
+
+Hassan's features (orders in Firestore, provider matching, live tracking, prices from Firestore) come next.
+
+```bash
+npm run add:provider -- --phone 55550123 --name "Ahmed" --dry-run   # register a technician for Provider Mode (admin)
+npm run build:android                                                # Android development build with EAS
+```
+
 ## Demo script
 
 | Step | What to do | What it shows |
@@ -81,9 +99,15 @@ src/api/osm.ts               external APIs (Overpass, OSRM) and JSON parsing
 src/models/firestore.ts      Firebase structure and converters
 src/services/firestoreRepo.ts  users, cars and addresses in Firestore (load, save, live updates)
 src/services/catalogRepo.ts  service catalogue from Firestore with built-in fallback
+src/services/providerRepo.ts  Provider Mode: open jobs, accept, status updates in Firestore
+src/services/photoUpload.ts  car photo upload to Cloud Storage
+src/services/push.ts         push token and push messages for order status
+src/views/provider/          Provider Mode screens (jobs list, job)
 scripts/seed-services.ts     seeds the services collection (admin)
+scripts/add-provider.ts      registers a technician in the providers collection (admin)
 src/feasibility/tests.ts     the in-app technology tests
-firebase/firestore.rules     security rules (publish in the Firebase console)
+firebase/firestore.rules     Firestore security rules (publish in the Firebase console)
+firebase/storage.rules       Cloud Storage rules for car photos
 docs/                        Firebase setup, Firestore data, data mapping, feasibility results, user test plan, feature schedule
 __tests__/                   Jest unit tests
 ```
@@ -91,7 +115,7 @@ __tests__/                   Jest unit tests
 ## Known limitations
 
 - Expo Go has no Firebase: there the OTP is generated locally and data stays on the phone. In the development build, sign-in, profile, cars, addresses and the service catalogue use Firebase.
-- Orders are still saved on the phone until Sprint 5; the technician and their speed are simulated (their starting business and road route are real).
+- Orders are still saved on the phone until Hassan's Version 2 feature 5; until then a technician accepts orders in Provider Mode on the same phone, or the technician is simulated. The van's movement is simulated (Demo Mode) until live tracking; its starting business and road route are real.
 - The public Overpass and OSRM servers are for light use; the app falls back to estimates when they are unreachable.
 - Card payment and promo codes are placeholders.
 - The browser preview cannot show maps, secure storage, haptics or reverse geocoding; use a phone or simulator.

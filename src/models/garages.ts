@@ -32,3 +32,13 @@ export function frequentGarages(orders: Order[], limit = 3): UsedGarage[] {
 export function usedGarageLabel(g: UsedGarage): string {
   return g.timesUsed > 1 ? `Used ${g.timesUsed} times` : 'Used before';
 }
+
+/** Driving distance when OSRM gave one, otherwise the straight-line distance. */
+export function roadKm(p: { distanceKm: number; route?: { distanceKm: number } }): number {
+  return p.route?.distanceKm ?? p.distanceKm;
+}
+
+/** The place closest by road (used to pick the garage a tow goes to). Undefined for an empty list. */
+export function nearestByRoad<T extends { distanceKm: number; route?: { distanceKm: number } }>(places: T[]): T | undefined {
+  return [...places].sort((a, b) => roadKm(a) - roadKm(b))[0];
+}

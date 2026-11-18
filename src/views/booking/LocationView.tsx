@@ -14,12 +14,15 @@ import { colors, font } from '../../theme';
  * 07 Location, now the first step after choosing a service (MVP 1 feedback).
  * Finds the driver automatically with GPS. If that fails, the driver describes where they are
  * (and can still pick a saved place or tap the map). The description is sent to the technician.
+ * When GPS fails, a large "Enter Location Manually" button opens the description field (V2 feature 2).
  */
 export default function LocationView({ navigation }: ScreenProps<'Location'>) {
   const { draft, updateDraft } = useApp();
   const { addresses } = useAccount();
   const [locating, setLocating] = useState(false);
   const [notFound, setNotFound] = useState('');
+  // The driver chose to type where they are (Sprint 5: 3 of 10 missed this option when GPS failed).
+  const [manual, setManual] = useState(false);
   const service = draft.serviceId ? getService(draft.serviceId) : null;
 
   // Find the driver straight away; saved places are a fallback, not the default.
@@ -31,6 +34,7 @@ export default function LocationView({ navigation }: ScreenProps<'Location'>) {
   const center: Coordinates = selected?.coords ?? DOHA;
   const notes = draft.locationNotes ?? '';
   const canContinue = !!selected || notes.trim().length >= 3;
+  const gpsFailed = !locating && !selected && !!notFound;
 
   /** Asks the phone for its GPS position and turns it into a street address. */
   async function useCurrent() {
@@ -77,24 +81,42 @@ export default function LocationView({ navigation }: ScreenProps<'Location'>) {
       footer={<PrimaryButton label="Continue" disabled={!canContinue || locating} onPress={next} testID="location-continue" />}
     >
       {service ? <Text style={font.small}>{service.title}: we use your location to send the nearest technician.</Text> : null}
-      <MapPreview center={center} onPick={pinAt} height={210} />
+      {gpsFailed ? (
+        <>
+          <Banner tone="danger" icon="alert-circle-outline" text="We couldn't find your location. Type where you are, pick a saved place, or tap the map." />
+          {!manual ? (
+            <PrimaryButton label="Enter Location Manually" icon="create-outline" onPress={() => setManual(true)} testID="enter-location-manually" />
+          ) : null}
+        </>
+      ) : null}
+      {gpsFailed && manual ? (
+        <Field
+          key="manual"
+          label="Where is your car?"
+          value={notes}
+          onChangeText={(t) => updateDraft({ locationNotes: t })}
+          placeholder="e.g. Salwa Road exit 12, by the petrol station"
+          autoFocus
+          returnKeyType="done"
+          testID="location-manual"
+        />
+      ) : null}
+      <MapPreview center={center} onPick={pinAt} height={gpsFailed ? 160 : 210} />
       <View style={styles.address}>
         {locating ? <ActivityIndicator color={colors.primary} size="small" /> : <Ionicons name="location" size={18} color={colors.primary} />}
         <Text style={{ color: colors.text, flex: 1 }} numberOfLines={2} testID="selected-address">
           {locating ? 'Finding your location…' : selected ? selected.line : 'Location not found yet'}
         </Text>
       </View>
-      {notFound && !selected ? (
-        <Banner tone="danger" icon="alert-circle-outline" text="We couldn't find your location. Tell us where you are below, pick a saved place, or tap the map." />
-      ) : null}
-
-      <Field
-        label={selected ? 'Anything that helps us find you? (optional)' : 'Where are you?'}
-        value={notes}
-        onChangeText={(t) => updateDraft({ locationNotes: t })}
-        placeholder="e.g. Salwa Road exit 12, by the petrol station"
-        testID="location-notes"
-      />
+      {gpsFailed && manual ? null : (
+        <Field
+          label={selected ? 'Anything that helps us find you? (optional)' : 'Where are you?'}
+          value={notes}
+          onChangeText={(t) => updateDraft({ locationNotes: t })}
+          placeholder="e.g. Salwa Road exit 12, by the petrol station"
+          testID="location-notes"
+        />
+      )}
 
       <Pressable style={styles.gps} onPress={useCurrent} disabled={locating} testID="use-current-location">
         <Ionicons name="locate-outline" size={18} color={colors.primary} />
