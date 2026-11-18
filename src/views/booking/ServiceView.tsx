@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo } from 'react';
-import { Alert, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Banner, Chip, Field, IconName, OptionRow, PriceSummary, PrimaryButton, Screen, SectionLabel } from '../../components/ui';
 import { getService } from '../../models/catalog';
-import { buildQuote, isFirstWashFree } from '../../models/pricing';
+import { roadKm } from '../../models/garages';
+import { buildQuote, isFirstWashFree, towOptionLabel, towPriceExplanation } from '../../models/pricing';
 import { ScreenProps } from '../../navigation/types';
 import { pickCarPhoto } from '../../services/media';
 import { useAccount, useApp } from '../../viewModels/AppContext';
+import { useNearestGarage } from '../../viewModels/useNearestGarage';
 import { colors, font } from '../../theme';
 
 const LITRES = [20, 40, 60];
@@ -30,6 +32,20 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
     () => buildQuote({ serviceId: service.id, optionId, addOnIds: draft.addOnIds, litres: draft.litres, distanceKm: draft.distanceKm, firstWashFree }),
     [service.id, optionId, draft.addOnIds, draft.litres, draft.distanceKm, firstWashFree],
   );
+
+  // Towing: find the nearest garage here, so the first price the driver sees already includes the distance.
+  // A described location has no real coordinates, so only the formula is shown until the tow is assigned.
+  const towing = service.pricing === 'towing' && optionId === 'towing';
+  const center = draft.address && draft.address.id !== 'described' ? draft.address.coords : undefined;
+  const garage = useNearestGarage(center, towing);
+  useEffect(() => {
+    const g = garage.nearest;
+    if (!towing || !g || draft.towTo) return;
+    const km = roadKm(g);
+    updateDraft({ towTo: { id: g.id, name: g.name, coords: g.coords, phone: g.phone, distanceKm: km }, distanceKm: km });
+  }, [towing, garage.nearest?.id]);
+  const towOption = service.options.find((o) => o.id === 'towing');
+  const hasDistance = towing && draft.distanceKm != null;
 
   const toggleAddOn = (id: string) =>
     updateDraft({ addOnIds: draft.addOnIds.includes(id) ? draft.addOnIds.filter((x) => x !== id) : [...draft.addOnIds, id] });
@@ -74,7 +90,7 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
           icon={o.icon as IconName}
           title={o.title}
           subtitle={o.subtitle}
-          right={o.priceLabel}
+          right={o.id === 'towing' && optionId === 'towing' ? towOptionLabel(quote, hasDistance, o.priceLabel) : o.priceLabel}
           danger={danger}
           selected={optionId === o.id}
           onPress={() => updateDraft({ optionId: o.id })}
@@ -101,8 +117,25 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
         </>
       ) : null}
 
-      {service.pricing === 'towing' && optionId === 'towing' ? (
-        <Banner icon="construct-outline" text="We find the garage nearest to you automatically. The final price is the base fee plus 5 QAR per km by road to that garage, shown on the next screens." />
+      {towing && towOption ? (
+        <View style={styles.towCard} testID="tow-price-explainer">
+          <Text style={[font.label, { color: colors.text }]}>How the tow price works</Text>
+          <Text style={{ color: colors.text, fontSize: 14 }}>
+            {towPriceExplanation(towOption.price, draft.distanceKm, draft.towTo?.name)}
+          </Text>
+          {garage.loading && !hasDistance ? (
+            <View style={styles.towRow}>
+              <ActivityIndicator size="small" color={colors.primary} />
+              <Text style={font.small}>Finding the nearest garage to add the distance…</Text>
+            </View>
+          ) : hasDistance ? (
+            <Text style={font.small}>You can choose a garage you have used before on the next screen; the price updates to match.</Text>
+          ) : (
+            <Text style={font.small}>
+              {center ? "We couldn't find a garage nearby yet. " : ''}The distance to the garage is added when the tow is assigned.
+            </Text>
+          )}
+        </View>
       ) : null}
 
       <Field
@@ -129,7 +162,7 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
         </Pressable>
       )}
 
-      <PriceSummary quote={quote} />
+      <PriceSummary quote={quote} totalLabel={hasDistance ? 'Estimated total' : undefined} />
     </Screen>
   );
 }
@@ -143,4 +176,6 @@ const styles = StyleSheet.create({
   },
   photoRow: { flexDirection: 'row', gap: 12, alignItems: 'center' },
   photo: { width: 72, height: 72, borderRadius: 8, backgroundColor: colors.surface },
+  towCard: { gap: 8, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  towRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 });

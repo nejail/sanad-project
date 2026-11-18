@@ -227,7 +227,8 @@ export function Chip({ label, selected, onPress }: { label: string; selected: bo
   );
 }
 
-export function PriceSummary({ quote }: { quote: Quote }) {
+/** Price breakdown card. `totalLabel` overrides the last row's label (e.g. "Estimated total" for a tow with a known distance). */
+export function PriceSummary({ quote, totalLabel }: { quote: Quote; totalLabel?: string }) {
   return (
     <Card style={{ gap: 8 }}>
       {quote.lines.map((l) =>
@@ -243,7 +244,7 @@ export function PriceSummary({ quote }: { quote: Quote }) {
       <Row label="VAT (5%)" value={formatQAR(quote.vat)} />
       <View style={styles.divider} />
       <View style={styles.summaryRow}>
-        <Text style={[font.h3]}>{quote.isEstimate ? 'Estimated from' : 'Total'}</Text>
+        <Text style={[font.h3]}>{totalLabel ?? (quote.isEstimate ? 'Estimated from' : 'Total')}</Text>
         <Text style={{ color: colors.primary, fontWeight: '800', fontSize: 18 }}>{formatQAR(quote.total)}</Text>
       </View>
     </Card>
