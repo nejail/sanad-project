@@ -35,7 +35,7 @@ Profile > **Provider Mode**. It has two sources of jobs:
 
 ### Rules Playground checks (orders)
 
-Create `providers/provA` (any fields) and `orders/o1` with `customerId: "custA"`, `providerId: null`, `dispatch: "provider"`, `status: "confirmed"` in the console first.
+Create `providers/provA` (any fields) and `orders/o1` with `customerId: "custA"`, `providerId: null`, `dispatch: "provider"`, `status: "confirmed"`, `offeredTo: "provA"` in the console first (since feature 8 an open order is only visible to the technician it is offered to).
 
 | # | Simulation | Location | Auth UID | Body (fields changed) | Expected |
 |---|---|---|---|---|---|
@@ -69,3 +69,63 @@ The provider side reads and writes `orders/{id}` directly, so it works as soon a
 - **Upload timing:** the car photo URL is added to the order a moment after it is placed (`photoPath`, `photoUrl`); write it with an update when it arrives.
 
 For live tracking (feature 7), set `LIVE_TRACKING_READY = true` in `src/models/tracking.ts` to remove the Demo Mode badge for real-provider orders, and replace `providerProgress` on Track Order with the position from `orders/{id}/tracking/live`. Provider matching (feature 8) can use `providers` with `isOnline` and the `services` each profile lists.
+
+# Hassan's Features (5, 7, 8, 9, 15)
+
+| # | Feature | Level | Where | How to check |
+|---|---|---|---|---|
+| 9 | Prices from the Firestore catalogue | A | `catalogRepo.ts`, `scripts/seed-services.ts` | `npm run seed:services -- --dry-run`, then `npm run seed:services -- --key <path to key>`. The six documents appear under `services`. Change one price in the console, relaunch the app: the new price shows on the service screen. |
+| 5 | Orders in Firestore with status history, live for the driver | A | `ordersRepo.ts`, `models/orders.ts`, `AppContext` (`placeOrder`, `setOrderStatus`, live listener) | Development build: place an order. It appears under `orders/` with `customerId`, `providerId: null` and `statusHistory`. A technician on a second phone accepts it and moves it along; the driver's Track Order follows each step with no refresh. |
+| 8 | Nearest available provider matching | A | `matching.ts`, `providerRepo.listenOpenJobs`, `ProviderJobsView` (online switch), rules | Two registered technicians online. The order's `offeredTo` is the nearer one (by road), and only they see it under New requests. Turn them off with **Available for new jobs** (or wait 2 minutes): `offeredTo` changes to the other one and `offeredBefore` lists the first. |
+| 7 | Live tracking from the technician's real location | A | `trackingRepo.ts`, `useShareLocation` (technician), `useLiveTracking` + `TrackOrderView` (driver), `LIVE_TRACKING_READY = true` | Technician taps **Start Driving to Customer**: the job shows "Sharing your live location" and `orders/{id}/tracking/live` updates every few seconds. The driver's van moves to that position within a few seconds and shows "Live location · x km away" with the live ETA. Writing a test `location` GeoPoint in the console moves the van too. No Demo Mode badge for real-technician orders. |
+| 15 | Book again | B | `rebookDraft` in `models/orders.ts`, `OrdersView` | Orders > Completed > **Book again** opens the service screen with the same option, car and address (for now, ASAP). |
+
+Feature 14 (rate the provider) is not done: updating the technician's rating from the driver's phone needs a rule (or a server function) that checks the order is done and is the driver's, which is not in place yet.
+
+## How the parts connect
+
+- **Placing an order (development build).** `placeOrder` keeps the order on the phone as before, then writes it to `orders/{id}` with `orderToDoc`. Order ids end with four characters of the driver's user id (`SND-1043-K7QF`) so two drivers never write the same document.
+- **Who gets it.** `dispatch` is `'provider'` when at least one online technician offers the service (`providers` where `isOnline == true`), otherwise `'simulated'`, so a demo never waits forever. The **Send my new orders to Provider Mode** switch still forces `'provider'` for testing on one phone. For `'provider'` orders, the online technicians are ranked by road distance (OSRM, 4 s limit each) from their `lastLocation`, or their `base` when they have not shared a location yet, with the straight line as the fallback, and the order is written with `offeredTo`, `offeredAt` and `offeredBefore`.
+- **Moving on.** Every 15 seconds the driver's phone checks its waiting orders: if the technician went offline or 2 minutes passed, it updates `offeredTo` to the next nearest technician it was not offered to yet (starting again from the nearest once everyone had it). The rules allow the driver to change these fields only while `providerId` is null.
+- **Following the technician.** The driver's phone listens to `orders` where `customerId == uid` and merges them into the phone's orders (`mergeOrders`): orders sent to technicians follow Firestore; simulated orders keep the phone's copy because the phone moves them along, and their status changes are written with an update. After placing, the driver's phone only ever updates the fields it may change (`DRIVER_ORDER_FIELDS`), never `set`, so a technician's acceptance is never overwritten. The car photo URL is written with an update when the upload finishes.
+- **Live location.** While a job is `on_the_way`, the technician's phone watches its location in the foreground (`expo-location`, every 4 s or 10 m) and writes `orders/{id}/tracking/live` (`location`, `heading`, `etaMin`, `updatedAt`) and `providers/{uid}.lastLocation` and `geohash` in one batch. A position older than 2 minutes is ignored and the animation is used instead.
+- **Indexes.** Every query uses equality filters only, so no composite index is needed (no `firestore.indexes.json`).
+
+## Changes to Nasser's files
+
+| File | Change |
+|---|---|
+| `src/models/types.ts`, `src/models/firestore.ts` | `offeredTo`, `offeredAt`, `offeredBefore` on `Order`, `OrderDoc`, `orderToDoc` and `orderFromDoc`. |
+| `src/services/providerRepo.ts` | `listenOpenJobs(uid, ...)` also filters `offeredTo == uid`; `decodeOrder` reads `offeredAt`. |
+| `src/viewModels/useProviderJobs.ts`, `src/views/provider/ProviderJobsView.tsx` | Passes the technician's id to `listenOpenJobs`; adds `setOnline` and an **Available for new jobs** switch. |
+| `src/views/provider/ProviderJobView.tsx` | One line: `useShareLocation(order)`, plus a banner while sharing. |
+| `src/views/orders/TrackOrderView.tsx` | Uses the live position and ETA when there is one; Demo Mode stays for simulated orders and for Provider Mode on one phone. |
+| `src/models/tracking.ts` | `LIVE_TRACKING_READY = true`. |
+| `src/viewModels/AppContext.tsx` | Order ids, writing and listening to orders, matching, re-offering, Book again. |
+| `firebase/firestore.rules` | See below. |
+| `__tests__/providerJobs.test.ts`, `__tests__/version2.test.ts` | Open jobs test uses `offeredTo`; the Demo Mode badge test expects no badge for real-technician orders. |
+
+## Rules changes (publish `firebase/firestore.rules` again)
+
+- A provider reads and accepts an open order only when `offeredTo` is their uid.
+- The driver may change `offeredTo`, `offeredAt` and `offeredBefore` only while `providerId` is null, can never change `dispatch`, and on an order sent to technicians may set the status only to `cancelled`.
+
+### Rules Playground checks (Hassan's features)
+
+Use the console data from the table above (`orders/o1` offered to `provA`), plus `providers/provB`.
+
+| # | Simulation | Location | Auth UID | Body (fields changed) | Expected |
+|---|---|---|---|---|---|
+| 10 | get | `orders/o1` | `provB` (a provider it is not offered to) | | Denied |
+| 11 | update | `orders/o1` | `provB` | `providerId: "provB"`, `status: "accepted"` | Denied (offered to provA) |
+| 12 | update | `orders/o1` | `custA` | `offeredTo: "provB"`, `offeredBefore: ["provA"]` | Allowed (moving the offer on) |
+| 13 | update | `orders/o1` after 3 (`providerId: "provA"`) | `custA` | `offeredTo: "provB"` | Denied (already accepted) |
+| 14 | update | `orders/o1` | `custA` | `status: "accepted"` | Denied (only a technician moves it) |
+| 15 | update | `orders/o1` | `custA` | `status: "cancelled"` | Allowed |
+| 16 | update | `orders/o1` | `custA` | `dispatch: "simulated"` | Denied |
+| 17 | create | `orders/o2` | `custA` | `customerId: "custA"`, `providerId: null` | Allowed |
+| 18 | create | `orders/o3` | `custA` | `customerId: "custB"`, `providerId: null` | Denied |
+| 19 | create | `orders/o1/tracking/live` after 3 | `provA` | `location`, `etaMin`, `updatedAt` | Allowed |
+| 20 | create | `orders/o1/tracking/live` after 3 | `provB` | same | Denied |
+| 21 | get | `orders/o1/tracking/live` | `custA` | | Allowed |
+| 22 | update | `providers/provA` | `provA` | `lastLocation`, `geohash` | Allowed |
