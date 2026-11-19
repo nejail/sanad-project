@@ -3,7 +3,7 @@
  * easy to test: order numbers, which fields a driver may change, and how a Firestore copy of an
  * order is merged with the one kept on the phone.
  */
-import { Order } from './types';
+import { BookingDraft, Car, Order } from './types';
 
 /** Fields the driver's phone may change on an order once it is placed (see firebase/firestore.rules). */
 export const DRIVER_ORDER_FIELDS = [
@@ -65,6 +65,26 @@ export function mergeOrders(local: Order[], remote: Order[]): Order[] {
     });
   }
   return [...merged.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+/**
+ * A new booking with the same service, option, car and address as an earlier order (V2 feature 15,
+ * "Book again"). The car is left out when it was removed since, so Select Vehicle asks again. It is
+ * always for now (ASAP), with fresh prices; the photo, notes and promo are not copied.
+ */
+export function rebookDraft(order: Order, cars: Car[]): BookingDraft {
+  const { towTo } = order;
+  return {
+    serviceId: order.serviceId,
+    optionId: order.optionId,
+    addOnIds: [],
+    carId: cars.some((c) => c.id === order.carId) ? order.carId : undefined,
+    address: order.address,
+    schedule: { kind: 'asap' },
+    payment: order.payment,
+    towTo: towTo ? { id: towTo.id, name: towTo.name, coords: towTo.coords, phone: towTo.phone, distanceKm: towTo.distanceKm } : undefined,
+    distanceKm: towTo?.distanceKm,
+  };
 }
 
 /** True when two order lists show the same thing, so the screen does not redraw for nothing. */

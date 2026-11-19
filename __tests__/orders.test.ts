@@ -1,5 +1,5 @@
 import { buildQuote } from '../src/models/pricing';
-import { driverFields, mergeOrders, nextOrderId, orderNumber, sameOrders } from '../src/models/orders';
+import { driverFields, mergeOrders, nextOrderId, orderNumber, rebookDraft, sameOrders } from '../src/models/orders';
 import { Order } from '../src/models/types';
 import { OrdersRepo, encodeOrder } from '../src/services/ordersRepo';
 import { orderToDoc } from '../src/models/firestore';
@@ -137,5 +137,23 @@ describe('OrdersRepo', () => {
     const tow = order('SND-1', { serviceId: 'emergency', towTo: { id: 'g', name: 'Garage', coords: { latitude: 25.2, longitude: 51.5 }, distanceKm: 6 } });
     const data = encodeOrder(db, orderToDoc(tow, 'u'));
     expect((data.towTo as { location: unknown }).location).toBeInstanceOf(FakeGeoPoint);
+  });
+});
+
+describe('Book again (V2 feature 15)', () => {
+  const cars = [{ id: 'car-1', make: 'Toyota', model: 'Land Cruiser', year: '2022', plate: '12345', color: 'White', fuel: 'Petrol', isDefault: true }];
+  it('starts a new booking with the same service, option, car and address, for now', () => {
+    const d = rebookDraft(order('SND-1', { status: 'done', schedule: { kind: 'later', date: '2026-11-20', time: '3 PM' }, notes: 'old note', photoUri: 'file:///x.jpg' }), cars);
+    expect(d).toMatchObject({ serviceId: 'battery', optionId: 'jump', carId: 'car-1', payment: 'cash', schedule: { kind: 'asap' }, addOnIds: [] });
+    expect(d.address?.line).toBe('CMU-Q car park');
+    expect(d.notes).toBeUndefined();
+    expect(d.photoUri).toBeUndefined();
+  });
+  it('asks for a car again when the old one was removed, and keeps a tow destination', () => {
+    const tow = order('SND-2', { serviceId: 'emergency', optionId: 'towing', towTo: { id: 'g', name: 'Garage', coords: { latitude: 25.2, longitude: 51.5 }, distanceKm: 7 } });
+    const d = rebookDraft(tow, []);
+    expect(d.carId).toBeUndefined();
+    expect(d.towTo?.name).toBe('Garage');
+    expect(d.distanceKm).toBe(7);
   });
 });

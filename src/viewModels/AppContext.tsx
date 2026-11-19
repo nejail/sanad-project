@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { orderTitle } from '../models/catalog';
-import { mergeOrders, nextOrderId, sameOrders } from '../models/orders';
+import { mergeOrders, nextOrderId, rebookDraft, sameOrders } from '../models/orders';
 import { buildQuote, isFirstWashFree } from '../models/pricing';
 import { DEMO_ADDRESSES, DEMO_CARS, DEMO_ORDERS, DEMO_PHONE, DEMO_USER } from '../models/seed';
 import { withStatus } from '../models/tracking';
@@ -32,7 +32,8 @@ type Action =
   | { type: 'remote'; remote: RemoteAccount }
   | { type: 'remoteOrders'; orders: Order[] }
   | { type: 'draft'; patch: Partial<BookingDraft> }
-  | { type: 'resetDraft'; serviceId?: ServiceId };
+  | { type: 'resetDraft'; serviceId?: ServiceId }
+  | { type: 'setDraft'; draft: BookingDraft };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -61,6 +62,8 @@ function reducer(state: State, action: Action): State {
       return { ...state, draft: { ...state.draft, ...action.patch } };
     case 'resetDraft':
       return { ...state, draft: { ...emptyDraft, serviceId: action.serviceId } };
+    case 'setDraft':
+      return { ...state, draft: { ...emptyDraft, ...action.draft } };
   }
 }
 
@@ -479,6 +482,10 @@ function useAppModel() {
 
   const updateDraft = useCallback((patch: Partial<BookingDraft>) => dispatch({ type: 'draft', patch }), []);
   const startBooking = useCallback((serviceId: ServiceId) => dispatch({ type: 'resetDraft', serviceId }), []);
+  /** Starts a booking like an earlier order: same service, option, car and address (V2 feature 15). */
+  const bookAgain = useCallback((order: Order) => {
+    dispatch({ type: 'setDraft', draft: rebookDraft(order, accountRef.current?.cars ?? []) });
+  }, []);
 
   const placeOrder = useCallback((): Order => {
     const a = state.account;
@@ -633,6 +640,7 @@ function useAppModel() {
       addAddress,
       updateDraft,
       startBooking,
+      bookAgain,
       placeOrder,
       setOrderStatus,
       acceptOrderOnDevice,
@@ -642,7 +650,7 @@ function useAppModel() {
       /** Technicians online right now (development build), for matching new orders. */
       onlineProviders,
     }),
-    [state, authUid, repo, catalogSource, syncError, clearSyncError, justRegistered, clearJustRegistered, skippedFirstCar, skipFirstCar, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus, acceptOrderOnDevice, providerTestMode, onlineProviders],
+    [state, authUid, repo, catalogSource, syncError, clearSyncError, justRegistered, clearJustRegistered, skippedFirstCar, skipFirstCar, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, bookAgain, placeOrder, setOrderStatus, acceptOrderOnDevice, providerTestMode, onlineProviders],
   );
 }
 
