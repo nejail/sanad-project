@@ -41,7 +41,19 @@ export default function ProviderJobsView({ navigation }: ScreenProps<'ProviderJo
       {jobs.checking ? (
         <View style={styles.row}><ActivityIndicator color={colors.primary} /><Text style={font.small}>Checking your technician account…</Text></View>
       ) : jobs.source === 'firestore' ? (
-        <Banner tone="success" icon="shield-checkmark-outline" text={`Signed in as technician ${jobs.profile.name}${jobs.profile.businessName ? ` (${jobs.profile.businessName})` : ''}. New requests appear here as drivers send them.`} />
+        <>
+          <Banner tone="success" icon="shield-checkmark-outline" text={`Signed in as technician ${jobs.profile.name}${jobs.profile.businessName ? ` (${jobs.profile.businessName})` : ''}. New requests appear here as drivers send them.`} />
+          <View style={styles.row}>
+            <Text style={{ color: colors.text, flex: 1 }}>Available for new jobs</Text>
+            <Switch
+              value={jobs.profile.isOnline}
+              onValueChange={(on) => jobs.setOnline(on)}
+              trackColor={{ true: colors.success, false: colors.border }}
+              testID="provider-online-switch"
+            />
+          </View>
+          {!jobs.profile.isOnline ? <Text style={[font.small, { color: colors.price }]}>Offline: new requests go to other technicians.</Text> : null}
+        </>
       ) : (
         <Card style={{ gap: 10 }}>
           <Text style={{ color: colors.text, fontWeight: '700' }}>Test on this phone</Text>

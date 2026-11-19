@@ -43,7 +43,7 @@ export function useProviderJobs() {
   useEffect(() => {
     if (!repo || !profile) return;
     const fail = (e: Error) => setError(providerMessage(e));
-    const stops = [repo.listenOpenJobs(setRemoteOpen, fail), repo.listenMyJobs(profile.id, setRemoteMine, fail)];
+    const stops = [repo.listenOpenJobs(profile.id, setRemoteOpen, fail), repo.listenMyJobs(profile.id, setRemoteMine, fail)];
     return () => stops.forEach((stop) => stop());
   }, [repo, profile?.id]);
 
@@ -104,6 +104,18 @@ export function useProviderJobs() {
 
   const find = (id: string) => [...open, ...mine].find((o) => o.id === id);
 
+  /** Registered technician: available for new jobs or not. New orders are only offered to online technicians (V2 feature 8). */
+  async function setOnline(isOnline: boolean): Promise<void> {
+    if (!repo || !profile) return;
+    setProfile({ ...profile, isOnline });
+    try {
+      await repo.setOnline(profile.id, isOnline);
+    } catch (e) {
+      setProfile({ ...profile });
+      setError(providerMessage(e));
+    }
+  }
+
   return {
     source,
     checking,
@@ -116,5 +128,6 @@ export function useProviderJobs() {
     accept,
     advance,
     find,
+    setOnline,
   };
 }

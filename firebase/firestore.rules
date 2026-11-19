@@ -50,26 +50,32 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isOnline', 'lastLocation', 'geohash']);
     }
 
-    // Orders: the customer creates and reads their own. Registered providers see orders no one has
-    // accepted, accept one for themselves, then move it along one step at a time (V2 feature 4).
+    // Orders: the customer creates and reads their own. Each open order is offered to the nearest
+    // online provider only (offeredTo, V2 feature 8); that provider sees it, accepts it for themselves,
+    // then moves it along one step at a time (V2 feature 4).
     match /orders/{orderId} {
       function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
       function isCustomer() { return signedIn() && resource.data.customerId == request.auth.uid; }
       function isAssigned() { return signedIn() && resource.data.providerId == request.auth.uid; }
       function isOpen() { return resource.data.dispatch == 'provider' && resource.data.providerId == null && resource.data.status == 'confirmed'; }
+      function offeredToMe() { return resource.data.get('offeredTo', null) == request.auth.uid; }
       function nextStep(from, to) {
         return (from == 'accepted' && to == 'on_the_way') || (from == 'on_the_way' && to == 'arrived') || (from == 'arrived' && to == 'done');
       }
 
       allow create: if signedIn() && request.resource.data.customerId == request.auth.uid
         && request.resource.data.providerId == null;
-      allow read: if isCustomer() || isAssigned() || (isProvider() && resource.data.providerId == null);
+      allow read: if isCustomer() || isAssigned() || (isProvider() && resource.data.providerId == null && offeredToMe());
       allow update: if
-        // The customer updates their own order but cannot assign or impersonate a technician.
-        (isCustomer() && !changed().hasAny(['customerId', 'providerId', 'provider', 'acceptedAt']))
-        // A registered provider accepts an open order, for themselves only. A second provider
+        // The customer updates their own order but cannot assign or impersonate a technician. They may
+        // offer it to the next technician only while no one has accepted it, and on an order sent to
+        // technicians the only status they may set themselves is cancelled.
+        (isCustomer() && !changed().hasAny(['customerId', 'providerId', 'provider', 'acceptedAt', 'dispatch'])
+          && (!changed().hasAny(['offeredTo', 'offeredAt', 'offeredBefore']) || resource.data.providerId == null)
+          && (resource.data.get('dispatch', 'simulated') != 'provider' || !changed().hasAny(['status']) || request.resource.data.status == 'cancelled'))
+        // The provider the order is offered to accepts it, for themselves only. A second provider
         // accepting the same order is refused because providerId is no longer null.
-        || (isProvider() && isOpen()
+        || (isProvider() && isOpen() && offeredToMe()
           && request.resource.data.providerId == request.auth.uid
           && request.resource.data.status == 'accepted'
           && changed().hasOnly(['providerId', 'provider', 'status', 'acceptedAt', 'statusHistory', 'updatedAt']))
