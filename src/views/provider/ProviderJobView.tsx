@@ -10,6 +10,7 @@ import { formatPhone } from '../../models/validation';
 import { ScreenProps } from '../../navigation/types';
 import { callNumber, openWhatsApp } from '../../services/contact';
 import { useProviderJobs } from '../../viewModels/useProviderJobs';
+import { useShareLocation } from '../../viewModels/useShareLocation';
 import { colors, font } from '../../theme';
 
 /**
@@ -20,6 +21,7 @@ export default function ProviderJobView({ navigation, route }: ScreenProps<'Prov
   const jobs = useProviderJobs();
   const order = jobs.find(route.params.orderId);
   const [busy, setBusy] = useState(false);
+  const location = useShareLocation(order); // live tracking while On the way (V2 feature 7)
 
   if (!order) {
     return (
@@ -60,6 +62,8 @@ export default function ProviderJobView({ navigation, route }: ScreenProps<'Prov
       }
     >
       <MapPreview center={order.address.coords} height={190} interactive={false} />
+      {location.sharing ? <Banner tone="success" icon="navigate-outline" text="Sharing your live location with the driver." /> : null}
+      {location.error ? <Banner tone="danger" text={location.error} /> : null}
       <Card style={{ gap: 8 }}>
         <Row label="Service" value={order.title} />
         <Row label="Car" value={order.carLabel} />
