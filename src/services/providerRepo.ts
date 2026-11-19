@@ -26,6 +26,7 @@ export function decodeOrder(id: string, data: Record<string, unknown>): Order {
     createdAt: toIso(d.createdAt),
     updatedAt: toIso(d.updatedAt),
     acceptedAt: d.acceptedAt ? toIso(d.acceptedAt) : null,
+    offeredAt: d.offeredAt ? toIso(d.offeredAt) : null,
     schedule: d.schedule ?? { kind: 'asap', date: null, time: null },
     car: d.car ?? { id: '', label: 'Car' },
     payment: d.payment ?? { method: 'cash', status: 'unpaid' },

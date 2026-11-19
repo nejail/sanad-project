@@ -119,6 +119,11 @@ export interface OrderDoc {
   customerName?: string | null;
   customerPhone?: string | null; // E.164, so the technician can call the driver
   customerPushToken?: string | null; // Expo push token for status notifications with the app closed
+  /** Nearest online technician the job is offered to; only they can see and accept it (V2 feature 8). */
+  offeredTo?: string | null;
+  offeredAt?: TimestampLike | null;
+  /** Technicians it was offered to before (moved on after 2 minutes or when they went offline). */
+  offeredBefore?: string[];
 }
 
 export interface TrackingDoc {
@@ -202,6 +207,9 @@ export function orderToDoc(o: Order, customerId: string, providerId: string | nu
     customerName: o.customerName ?? null,
     customerPhone: o.customerPhone ? toE164(o.customerPhone) : null,
     customerPushToken: o.customerPushToken ?? null,
+    offeredTo: o.offeredTo ?? null,
+    offeredAt: o.offeredAt ?? null,
+    offeredBefore: o.offeredBefore ?? [],
   };
 }
 
@@ -262,6 +270,9 @@ export function orderFromDoc(id: string, d: OrderDoc): Order {
     customerName: d.customerName ?? undefined,
     customerPhone: d.customerPhone ? fromE164(d.customerPhone) : undefined,
     customerPushToken: d.customerPushToken ?? undefined,
+    offeredTo: d.offeredTo ?? undefined,
+    offeredAt: d.offeredAt ?? undefined,
+    offeredBefore: d.offeredBefore?.length ? d.offeredBefore : undefined,
   };
 }
 
