@@ -88,8 +88,8 @@ describe('Demo Mode badge (V2 feature 10)', () => {
   it('shows while the van movement is simulated', () => {
     expect(showsDemoBadge({})).toBe(true);
     expect(showsDemoBadge({ dispatch: 'simulated' })).toBe(true);
-    // Live tracking (feature 7) is not ready, so real-provider orders still show it.
-    expect(showsDemoBadge({ dispatch: 'provider' })).toBe(true);
+    // Live tracking (feature 7) is ready, so real-provider orders do not show it.
+    expect(showsDemoBadge({ dispatch: 'provider' })).toBe(false);
   });
   it('moves a real technician only once they set On the way', () => {
     const left = Date.parse('2026-11-18T10:00:00Z');
