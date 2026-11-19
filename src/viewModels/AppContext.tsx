@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { orderTitle } from '../models/catalog';
+import { mergeOrders, nextOrderId, sameOrders } from '../models/orders';
 import { buildQuote, isFirstWashFree } from '../models/pricing';
 import { DEMO_ADDRESSES, DEMO_CARS, DEMO_ORDERS, DEMO_PHONE, DEMO_USER } from '../models/seed';
 import { withStatus } from '../models/tracking';
@@ -7,6 +8,7 @@ import { Address, BookingDraft, Car, Order, OrderStatus, Provider, ServiceId } f
 import { getPhoneAuth, isVerifiedNumber } from '../services/auth';
 import { CatalogSource, loadCatalog } from '../services/catalogRepo';
 import { FirestoreRepo, RemoteAccount, firestoreMessage, getFirestoreApi, sameRemote } from '../services/firestoreRepo';
+import { DriverOrderUpdate, OrdersRepo } from '../services/ordersRepo';
 import { PHOTO_UPLOAD_FAILED, uploadOrderPhoto } from '../services/photoUpload';
 import { registerPushToken } from '../services/push';
 import { clearSession, createSession, readSession } from '../services/session';
@@ -27,6 +29,7 @@ type Action =
   | { type: 'signedIn'; account: AccountData }
   | { type: 'account'; update: (a: AccountData) => AccountData }
   | { type: 'remote'; remote: RemoteAccount }
+  | { type: 'remoteOrders'; orders: Order[] }
   | { type: 'draft'; patch: Partial<BookingDraft> }
   | { type: 'resetDraft'; serviceId?: ServiceId };
 
@@ -45,6 +48,13 @@ function reducer(state: State, action: Action): State {
       // Keep screen-only details Firestore does not store, such as "last service 5 days ago".
       const cars = action.remote.cars.map((c) => ({ ...c, lastService: a.cars.find((x) => x.id === c.id)?.lastService }));
       return { ...state, account: { ...a, user: action.remote.user, cars, addresses: action.remote.addresses } };
+    }
+    case 'remoteOrders': {
+      // Firestore sent the driver's orders: a technician accepted or moved one along, or it was placed on another phone.
+      const a = state.account;
+      if (!a) return state;
+      const orders = mergeOrders(a.orders, action.orders);
+      return sameOrders(a.orders, orders) ? state : { ...state, account: { ...a, orders } };
     }
     case 'draft':
       return { ...state, draft: { ...state.draft, ...action.patch } };
@@ -99,6 +109,14 @@ function useAppModel() {
   const pushToken = useRef<string | null>(null);
   // Stops the live Firestore listeners; called before signing out so they are not rejected.
   const stopListening = useRef<(() => void) | null>(null);
+  const stopOrders = useRef<(() => void) | null>(null);
+  // Orders in Firestore (V2 feature 5): the driver's phone creates each order once, then only updates it.
+  const ordersRepo = useMemo(() => (repo ? new OrdersRepo(getFirestoreApi()) : null), [repo]);
+  // Orders this phone knows are in Firestore, with the write that created them (updates wait for it).
+  const remoteOrders = useRef(new Map<string, Promise<void>>());
+  // Latest account, for callbacks that need the current orders without re-creating themselves.
+  const accountRef = useRef<AccountData | null>(null);
+  accountRef.current = state.account;
 
   /** Firebase mode: the number typed on screen must be the one Firebase verified for this user. */
   const checkVerified = useCallback((phone: string) => {
@@ -246,6 +264,39 @@ function useAppModel() {
     };
   }, [repo, authUid, state.status]);
 
+  // Live orders (V2 feature 5): a technician accepting or moving an order along on their phone shows here.
+  useEffect(() => {
+    if (!ordersRepo || !isFirebaseUid(authUid) || state.status !== 'signedIn') return;
+    const stop = ordersRepo.listenMine(
+      authUid,
+      (orders) => {
+        if (uidRef.current !== authUid) return;
+        orders.forEach((o) => { if (!remoteOrders.current.has(o.id)) remoteOrders.current.set(o.id, Promise.resolve()); });
+        dispatch({ type: 'remoteOrders', orders });
+      },
+      (e) => {
+        if (uidRef.current === authUid) setSyncError(firestoreMessage(e));
+      },
+    );
+    stopOrders.current = stop;
+    return () => {
+      stop();
+      if (stopOrders.current === stop) stopOrders.current = null;
+    };
+  }, [ordersRepo, authUid, state.status]);
+
+  /**
+   * Sends a change the driver may make to an order that is in Firestore (never the technician's
+   * fields). Waits for the order to be created first. Orders only on the phone are skipped.
+   */
+  const updateRemoteOrder = useCallback((id: string, fields: DriverOrderUpdate) => {
+    const created = remoteOrders.current.get(id);
+    if (!ordersRepo || !created) return;
+    created
+      .then(() => ordersRepo.update(id, fields))
+      .catch((e) => setSyncError(firestoreMessage(e)));
+  }, [ordersRepo]);
+
   // Ask for a push token once signed in (after Home has asked for notification permission).
   useEffect(() => {
     if (state.status !== 'signedIn' || !repo) return;
@@ -313,6 +364,9 @@ function useAppModel() {
     uidRef.current = null;
     stopListening.current?.();
     stopListening.current = null;
+    stopOrders.current?.();
+    stopOrders.current = null;
+    remoteOrders.current.clear();
     await getPhoneAuth().signOut().catch(() => undefined);
     await clearSession();
     remoteRef.current = null;
@@ -395,7 +449,7 @@ function useAppModel() {
       }
       : { name: 'Waiting for a technician', rating: 0, vehicle: '', phone: '', base, etaMin: d.providerBase?.etaMin };
     const order: Order = {
-      id: `SND-${Math.max(1042, ...a.orders.map((o) => Number(o.id.replace('SND-', '')) || 0)) + 1}`,
+      id: nextOrderId(a.orders, ordersRepo && isFirebaseUid(uidRef.current) ? uidRef.current : null),
       serviceId: d.serviceId,
       optionId: d.optionId,
       title: orderTitle(d.serviceId, d.optionId),
@@ -419,23 +473,41 @@ function useAppModel() {
       customerPushToken: pushToken.current ?? undefined,
     };
     dispatch({ type: 'account', update: (acc) => ({ ...acc, orders: [order, ...acc.orders] }) });
-    // Development build: upload the car photo so the technician can open it (V2 feature 13).
     const userId = uidRef.current;
+    // Development build: save the order in Firestore (V2 feature 5). The copy on the phone stays as the
+    // offline fallback; Firestore keeps the write and sends it when the phone is back online.
+    if (ordersRepo && isFirebaseUid(userId)) {
+      const created = ordersRepo.create(order, userId);
+      remoteOrders.current.set(order.id, created);
+      created.catch((e) => {
+        remoteOrders.current.delete(order.id);
+        setSyncError(firestoreMessage(e));
+      });
+    }
+    // Development build: upload the car photo so the technician can open it (V2 feature 13).
     if (repo && isFirebaseUid(userId) && order.photoUri) {
       uploadOrderPhoto(userId, order.id, order.photoUri)
-        .then(({ path, url }) =>
-          dispatch({ type: 'account', update: (acc) => ({ ...acc, orders: acc.orders.map((o) => (o.id === order.id ? { ...o, photoPath: path, photoUrl: url } : o)) }) }))
+        .then(({ path, url }) => {
+          dispatch({ type: 'account', update: (acc) => ({ ...acc, orders: acc.orders.map((o) => (o.id === order.id ? { ...o, photoPath: path, photoUrl: url } : o)) }) });
+          updateRemoteOrder(order.id, { photoPath: path, photoUrl: url });
+        })
         .catch((e) => {
           console.warn('[photo] upload failed', e);
           setSyncError(PHOTO_UPLOAD_FAILED);
         });
     }
     return order;
-  }, [state.account, state.draft, providerTestMode, repo]);
+  }, [state.account, state.draft, providerTestMode, repo, ordersRepo, updateRemoteOrder]);
 
   /** Moves an order to a new status and records when (statusHistory). */
   const setOrderStatus = useCallback((id: string, status: OrderStatus) => {
     const at = new Date().toISOString();
+    // Simulated orders are moved along by this phone, so their status is saved to Firestore from here.
+    // Orders sent to technicians are moved by the technician; the phone never writes those steps.
+    const current = accountRef.current?.orders.find((o) => o.id === id);
+    if (current && current.status !== status && (current.dispatch ?? 'simulated') !== 'provider') {
+      updateRemoteOrder(id, { status, statusHistory: withStatus(current, status, at).statusHistory });
+    }
     dispatch({
       type: 'account',
       update: (a) => ({
@@ -445,7 +517,7 @@ function useAppModel() {
         ),
       }),
     });
-  }, []);
+  }, [updateRemoteOrder]);
 
   /**
    * Provider Mode on this phone (no Firestore): the technician accepts one of the phone's own orders,
