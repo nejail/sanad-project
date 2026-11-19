@@ -8,6 +8,7 @@ import { Address, BookingDraft, Car, Order, OrderStatus, Provider, ServiceId } f
 import { getPhoneAuth, isVerifiedNumber } from '../services/auth';
 import { CatalogSource, loadCatalog } from '../services/catalogRepo';
 import { FirestoreRepo, RemoteAccount, firestoreMessage, getFirestoreApi, sameRemote } from '../services/firestoreRepo';
+import { MatchProvider, dispatchFor, eligibleProviders, listenOnlineProviders, needsNewOffer, nextOffer, rankByRoad } from '../services/matching';
 import { DriverOrderUpdate, OrdersRepo } from '../services/ordersRepo';
 import { PHOTO_UPLOAD_FAILED, uploadOrderPhoto } from '../services/photoUpload';
 import { registerPushToken } from '../services/push';
@@ -117,6 +118,13 @@ function useAppModel() {
   // Latest account, for callbacks that need the current orders without re-creating themselves.
   const accountRef = useRef<AccountData | null>(null);
   accountRef.current = state.account;
+  // Online technicians (V2 feature 8): new orders go to the nearest one who offers the service.
+  const [onlineProviders, setOnlineProviders] = useState<MatchProvider[]>([]);
+  const onlineRef = useRef<MatchProvider[]>([]);
+  onlineRef.current = onlineProviders;
+  const stopProviders = useRef<(() => void) | null>(null);
+  // Orders being offered to another technician right now (so each is only handled once at a time).
+  const offering = useRef(new Set<string>());
 
   /** Firebase mode: the number typed on screen must be the one Firebase verified for this user. */
   const checkVerified = useCallback((phone: string) => {
@@ -285,6 +293,23 @@ function useAppModel() {
     };
   }, [ordersRepo, authUid, state.status]);
 
+  // Online technicians, live, so placing an order can pick the nearest one straight away.
+  useEffect(() => {
+    if (!repo || !isFirebaseUid(authUid) || state.status !== 'signedIn') return;
+    const stop = listenOnlineProviders(getFirestoreApi(), setOnlineProviders, (e) => console.warn('[matching] providers', e));
+    stopProviders.current = stop;
+    return () => {
+      stop();
+      if (stopProviders.current === stop) stopProviders.current = null;
+      setOnlineProviders([]);
+    };
+  }, [repo, authUid, state.status]);
+
+  /** Changes some fields of one order on the phone. */
+  const patchOrder = useCallback((id: string, fields: Partial<Order>) => {
+    dispatch({ type: 'account', update: (a) => ({ ...a, orders: a.orders.map((o) => (o.id === id ? { ...o, ...fields } : o)) }) });
+  }, []);
+
   /**
    * Sends a change the driver may make to an order that is in Firestore (never the technician's
    * fields). Waits for the order to be created first. Orders only on the phone are skipped.
@@ -296,6 +321,33 @@ function useAppModel() {
       .then(() => ordersRepo.update(id, fields))
       .catch((e) => setSyncError(firestoreMessage(e)));
   }, [ordersRepo]);
+
+  // A waiting order moves to the next nearest technician when the one it was offered to does not accept
+  // within 2 minutes or goes offline (V2 feature 8). Checked every 15 seconds while the app is open.
+  useEffect(() => {
+    if (!ordersRepo || !isFirebaseUid(authUid) || state.status !== 'signedIn') return;
+    const check = () => {
+      const online = new Set(onlineRef.current.map((p) => p.id));
+      for (const o of accountRef.current?.orders ?? []) {
+        if (!remoteOrders.current.has(o.id) || offering.current.has(o.id) || !needsNewOffer(o, online)) continue;
+        const eligible = eligibleProviders(onlineRef.current, o.serviceId, authUid);
+        if (!eligible.some((p) => p.id !== o.offeredTo)) continue; // nobody else to offer it to
+        offering.current.add(o.id);
+        rankByRoad(eligible, o.address.coords)
+          .then((ranked) => {
+            const offer = nextOffer(o, ranked);
+            if (!offer || uidRef.current !== authUid) return;
+            patchOrder(o.id, { offeredTo: offer.offeredTo ?? undefined, offeredAt: offer.offeredAt ?? undefined, offeredBefore: offer.offeredBefore });
+            updateRemoteOrder(o.id, offer);
+          })
+          .catch(() => undefined)
+          .finally(() => offering.current.delete(o.id));
+      }
+    };
+    check();
+    const t = setInterval(check, 15000);
+    return () => clearInterval(t);
+  }, [ordersRepo, authUid, state.status, onlineProviders, patchOrder, updateRemoteOrder]);
 
   // Ask for a push token once signed in (after Home has asked for notification permission).
   useEffect(() => {
@@ -366,6 +418,8 @@ function useAppModel() {
     stopListening.current = null;
     stopOrders.current?.();
     stopOrders.current = null;
+    stopProviders.current?.();
+    stopProviders.current = null;
     remoteOrders.current.clear();
     await getPhoneAuth().signOut().catch(() => undefined);
     await clearSession();
@@ -433,7 +487,12 @@ function useAppModel() {
     const car = a.cars.find((c) => c.id === d.carId);
     const promoApplied = d.serviceId === 'carwash' && isFirstWashFree(a.orders);
     const createdAt = new Date().toISOString();
-    const dispatchMode: Order['dispatch'] = providerTestMode ? 'provider' : 'simulated';
+    const userId = uidRef.current;
+    const toFirestore = !!ordersRepo && isFirebaseUid(userId);
+    // Sent to technicians when one who offers this service is online (V2 feature 8); otherwise the
+    // prototype technician takes it, so a demo never waits forever. The test switch always sends it.
+    const eligible = toFirestore ? eligibleProviders(onlineRef.current, d.serviceId, userId) : [];
+    const dispatchMode: Order['dispatch'] = dispatchFor(eligible.length, providerTestMode);
     const base = d.providerBase ? { id: d.providerBase.id, name: d.providerBase.name, coords: d.providerBase.coords, phone: d.providerBase.phone } : undefined;
     // The prototype technician (simulated); with Provider Mode the real technician's details are added when they accept.
     const provider: Provider = dispatchMode === 'simulated'
@@ -449,7 +508,7 @@ function useAppModel() {
       }
       : { name: 'Waiting for a technician', rating: 0, vehicle: '', phone: '', base, etaMin: d.providerBase?.etaMin };
     const order: Order = {
-      id: nextOrderId(a.orders, ordersRepo && isFirebaseUid(uidRef.current) ? uidRef.current : null),
+      id: nextOrderId(a.orders, toFirestore ? userId : null),
       serviceId: d.serviceId,
       optionId: d.optionId,
       title: orderTitle(d.serviceId, d.optionId),
@@ -473,11 +532,22 @@ function useAppModel() {
       customerPushToken: pushToken.current ?? undefined,
     };
     dispatch({ type: 'account', update: (acc) => ({ ...acc, orders: [order, ...acc.orders] }) });
-    const userId = uidRef.current;
     // Development build: save the order in Firestore (V2 feature 5). The copy on the phone stays as the
     // offline fallback; Firestore keeps the write and sends it when the phone is back online.
-    if (ordersRepo && isFirebaseUid(userId)) {
-      const created = ordersRepo.create(order, userId);
+    // An order for technicians is first offered to the nearest one by road (V2 feature 8).
+    if (toFirestore) {
+      const created = (async () => {
+        let placed = order;
+        if (dispatchMode === 'provider' && eligible.length) {
+          const offer = nextOffer({}, await rankByRoad(eligible, order.address.coords));
+          if (offer) {
+            const fields = { offeredTo: offer.offeredTo ?? undefined, offeredAt: offer.offeredAt ?? undefined, offeredBefore: offer.offeredBefore };
+            placed = { ...order, ...fields };
+            patchOrder(order.id, fields);
+          }
+        }
+        await ordersRepo!.create(placed, userId);
+      })();
       remoteOrders.current.set(order.id, created);
       created.catch((e) => {
         remoteOrders.current.delete(order.id);
@@ -497,7 +567,7 @@ function useAppModel() {
         });
     }
     return order;
-  }, [state.account, state.draft, providerTestMode, repo, ordersRepo, updateRemoteOrder]);
+  }, [state.account, state.draft, providerTestMode, repo, ordersRepo, updateRemoteOrder, patchOrder]);
 
   /** Moves an order to a new status and records when (statusHistory). */
   const setOrderStatus = useCallback((id: string, status: OrderStatus) => {
@@ -569,8 +639,10 @@ function useAppModel() {
       /** When on, new orders wait for Provider Mode on this phone instead of the simulation. */
       providerTestMode,
       setProviderTestMode,
+      /** Technicians online right now (development build), for matching new orders. */
+      onlineProviders,
     }),
-    [state, authUid, repo, catalogSource, syncError, clearSyncError, justRegistered, clearJustRegistered, skippedFirstCar, skipFirstCar, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus, acceptOrderOnDevice, providerTestMode],
+    [state, authUid, repo, catalogSource, syncError, clearSyncError, justRegistered, clearJustRegistered, skippedFirstCar, skipFirstCar, restoreSession, accountExists, signIn, register, signOut, addCar, removeCar, addAddress, updateDraft, startBooking, placeOrder, setOrderStatus, acceptOrderOnDevice, providerTestMode, onlineProviders],
   );
 }
 
