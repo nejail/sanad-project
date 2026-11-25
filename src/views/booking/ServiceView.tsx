@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Banner, Chip, Field, IconName, OptionRow, PriceSummary, PrimaryButton, Screen, SectionLabel } from '../../components/ui';
 import { getService } from '../../models/catalog';
 import { roadKm } from '../../models/garages';
+import { pinnedCoords } from '../../models/location';
 import { buildQuote, isFirstWashFree, towOptionLabel, towPriceExplanation } from '../../models/pricing';
 import { ScreenProps } from '../../navigation/types';
 import { pickCarPhoto } from '../../services/media';
@@ -34,9 +35,8 @@ export default function ServiceView({ navigation, route }: ScreenProps<'Service'
   );
 
   // Towing: find the nearest garage here, so the first price the driver sees already includes the distance.
-  // A described location has no real coordinates, so only the formula is shown until the tow is assigned.
   const towing = service.pricing === 'towing' && optionId === 'towing';
-  const center = draft.address && draft.address.id !== 'described' ? draft.address.coords : undefined;
+  const center = pinnedCoords(draft.address);
   const garage = useNearestGarage(center, towing);
   useEffect(() => {
     const g = garage.nearest;

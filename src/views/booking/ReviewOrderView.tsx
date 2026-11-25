@@ -5,6 +5,7 @@ import { Banner, Card, IconTile, LinkText, OptionRow, PriceSummary, PrimaryButto
 import { SERVICE_PLACE_KIND, fetchRoute } from '../../api/osm';
 import { orderTitle } from '../../models/catalog';
 import { frequentGarages, roadKm, usedGarageLabel } from '../../models/garages';
+import { pinnedCoords } from '../../models/location';
 import { buildQuote, distanceKm as straightKm, isFirstWashFree } from '../../models/pricing';
 import { PlaceRef } from '../../models/types';
 import { ScreenProps } from '../../navigation/types';
@@ -28,7 +29,7 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
   const optionId = draft.optionId!;
   const car = cars.find((c) => c.id === draft.carId);
   const towing = serviceId === 'emergency' && optionId === 'towing';
-  const center = draft.address?.coords;
+  const center = pinnedCoords(draft.address);
 
   // Nearest business that can do this service, with driving time to the customer.
   const providers = useNearbyPlaces(center, SERVICE_PLACE_KIND[serviceId], { limit: 3, withRoutes: 1, direction: 'toCustomer' });

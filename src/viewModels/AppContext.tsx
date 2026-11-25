@@ -8,7 +8,7 @@ import { getPhoneAuth, isVerifiedNumber } from '../services/auth';
 import { CatalogSource, loadCatalog } from '../services/catalogRepo';
 import { FirestoreRepo, RemoteAccount, firestoreMessage, getFirestoreApi, sameRemote } from '../services/firestoreRepo';
 import { PHOTO_UPLOAD_FAILED, uploadOrderPhoto } from '../services/photoUpload';
-import { registerPushToken } from '../services/push';
+import { watchPushToken } from '../services/push';
 import { clearSession, createSession, readSession } from '../services/session';
 import { AccountData, loadAccount, saveAccount } from '../services/storage';
 
@@ -249,10 +249,7 @@ function useAppModel() {
   // Ask for a push token once signed in (after Home has asked for notification permission).
   useEffect(() => {
     if (state.status !== 'signedIn' || !repo) return;
-    const t = setTimeout(() => {
-      registerPushToken().then((token) => { pushToken.current = token; }).catch(() => undefined);
-    }, 3000);
-    return () => clearTimeout(t);
+    return watchPushToken((token) => { pushToken.current = token; });
   }, [state.status, repo]);
 
   /**
@@ -388,7 +385,7 @@ function useAppModel() {
         rating: 4.9,
         vehicle: d.serviceId === 'emergency' ? 'Flatbed tow truck' : 'Toyota Hilux service van',
         vehiclePlate: d.serviceId === 'emergency' ? '48213' : '61570',
-        verified: true,
+        verified: false, // not a real technician, so no Verified badge
         phone: d.providerBase?.phone ?? '+97455550123',
         base,
         etaMin: d.providerBase?.etaMin,

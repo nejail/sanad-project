@@ -85,7 +85,10 @@ export function otpErrorMessage(r: VerifyResult): string {
 
 export const otpService = new LocalOtpService();
 
-/** Average SMS delivery time measured in the Sprint 5 user tests (29 to 61 seconds). */
+/**
+ * How long to wait before saying the SMS is taking longer than usual. A little above the Sprint 5
+ * average of 42 seconds (29 to 61 seconds, timed for 8 of the 10 participants).
+ */
 export const SMS_TYPICAL_WAIT_SECONDS = 45;
 
 /**
@@ -97,7 +100,7 @@ export function smsWaitHint(secondsWaiting: number): { title: string; detail: st
   if (secondsWaiting < SMS_TYPICAL_WAIT_SECONDS) {
     return {
       title: 'Your code is on its way',
-      detail: 'The SMS usually arrives within a minute. Keep this screen open: the code fills in automatically.',
+      detail: 'The SMS usually arrives within a minute. Keep this screen open and tap the code above the keyboard when it arrives, or type it in.',
       late: false,
     };
   }

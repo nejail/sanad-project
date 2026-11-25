@@ -256,6 +256,51 @@ export function parseNominatim(json: unknown, center: Coordinates, kind: PlaceKi
     .map(({ named, ...p }) => p);
 }
 
+/** A place found from what the driver typed. */
+export interface FoundPlace {
+  name: string;
+  coords: Coordinates;
+}
+
+const inQatar = (c: Coordinates) => c.latitude > 24.4 && c.latitude < 26.3 && c.longitude > 50.6 && c.longitude < 51.8;
+
+/**
+ * Searches to try for a typed location, most specific first. Drivers describe places in a way no
+ * map knows ("Salwa Road exit 12, by the petrol station"), so the extra directions are dropped step by step.
+ */
+export function geocodeQueries(text: string): string[] {
+  const full = text.trim().replace(/\s+/g, ' ');
+  const beforeComma = full.split(',')[0].trim();
+  const place = beforeComma.split(/\b(?:by|near|next to|opposite|behind|beside|in front of|close to)\b/i)[0].trim();
+  const road = place.replace(/\bexit\s+\S+/i, '').trim();
+  return Array.from(new Set([full, beforeComma, place, road])).filter((q) => q.length >= 3);
+}
+
+export function buildGeocodeUrl(query: string): string {
+  return `${NOMINATIM_URL}?format=jsonv2&q=${encodeURIComponent(query)}&countrycodes=qa&limit=1&accept-language=en`;
+}
+
+/** The first result inside Qatar, or null when nothing was found. */
+export function parseGeocode(json: unknown): FoundPlace | null {
+  if (!Array.isArray(json)) throw new Error('Unexpected Nominatim response: not an array');
+  for (const r of json as NominatimResult[]) {
+    const coords = { latitude: Number(r.lat), longitude: Number(r.lon) };
+    if (!r.lat || !r.lon || !inQatar(coords)) continue;
+    const name = r.display_name?.split(',').slice(0, 2).map((p) => p.trim()).filter(Boolean).join(', ');
+    return { name: name || r.name || `${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`, coords };
+  }
+  return null;
+}
+
+/** Finds a typed location on the map. Null when no search finds it; throws when the server cannot be reached. */
+export async function geocode(text: string, fetcher: (url: string) => Promise<unknown> = fetchJson): Promise<FoundPlace | null> {
+  for (const q of geocodeQueries(text)) {
+    const found = parseGeocode(await fetcher(buildGeocodeUrl(q)));
+    if (found) return found;
+  }
+  return null;
+}
+
 /** GET places from Nominatim (one request, no widening). */
 export async function fetchNominatimPlaces(center: Coordinates, kind: PlaceKind, radiusKm: number, limit = 10): Promise<Place[]> {
   return parseNominatim(await fetchJson(buildNominatimUrl(center, kind, radiusKm, limit)), center, kind, limit);
