@@ -8,6 +8,7 @@ import { Order } from '../../models/types';
 import { ScreenProps } from '../../navigation/types';
 import { useApp } from '../../viewModels/AppContext';
 import { useProviderJobs } from '../../viewModels/useProviderJobs';
+import { useProviderRating } from '../../viewModels/useReviews';
 import { colors, font } from '../../theme';
 
 /** "5 min ago", "Just now", or the time for older requests. */
@@ -21,6 +22,8 @@ export function ageLabel(iso: string, now = Date.now()): string {
 /** Provider Mode: new requests a technician can accept, and the jobs they are working on (V2 feature 4). */
 export default function ProviderJobsView({ navigation }: ScreenProps<'ProviderJobs'>) {
   const jobs = useProviderJobs();
+  // Average of this technician's reviews (V2 feature 14), the profile value until the first one.
+  const rating = useProviderRating(jobs.source === 'firestore' ? jobs.profile.id : null, jobs.profile.rating);
   const { providerTestMode, setProviderTestMode } = useApp();
   const [accepting, setAccepting] = useState<string | null>(null);
 
@@ -53,6 +56,9 @@ export default function ProviderJobsView({ navigation }: ScreenProps<'ProviderJo
             />
           </View>
           {!jobs.profile.isOnline ? <Text style={[font.small, { color: colors.price }]}>Offline: new requests go to other technicians.</Text> : null}
+          <Text style={font.small} testID="provider-rating">
+            Your rating: ★ {rating.rating}{rating.count ? ` from ${rating.count} review${rating.count > 1 ? 's' : ''}` : ' (no reviews yet)'}
+          </Text>
         </>
       ) : (
         <Card style={{ gap: 10 }}>

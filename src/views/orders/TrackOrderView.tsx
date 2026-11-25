@@ -15,6 +15,8 @@ import { QATAR_EMERGENCY, callNumber, openWhatsApp } from '../../services/contac
 import { notify } from '../../services/notifications';
 import { useAccount, useApp } from '../../viewModels/AppContext';
 import { useLiveTracking } from '../../viewModels/useLiveTracking';
+import { useOrderProviderRating } from '../../viewModels/useReviews';
+import { RateTechnicianCard } from '../../components/RateTechnicianCard';
 import { colors, font } from '../../theme';
 
 /** Prototype: the provider's approach is simulated in 45 seconds so it can be demoed. */
@@ -37,6 +39,8 @@ export default function TrackOrderView({ navigation, route }: ScreenProps<'Track
   const simulated = order ? isSimulated(order) : true;
   // The technician's real position while they drive to the driver (V2 feature 7).
   const live = useLiveTracking(order);
+  // Average of the technician's reviews, or their profile rating (V2 feature 14).
+  const rated = useOrderProviderRating(order);
 
   const dest = order?.address.coords;
   // Provider starts at their real business (from Overpass) when known, otherwise ~3 km away.
@@ -198,7 +202,7 @@ export default function TrackOrderView({ navigation, route }: ScreenProps<'Track
                   <Text style={[font.h3, { fontSize: 15, flexShrink: 1 }]} numberOfLines={1}>{p.name}</Text>
                   {p.verified ? <Ionicons name="shield-checkmark" size={15} color={colors.success} accessibilityLabel="Verified technician" /> : null}
                 </View>
-                <Text style={font.small}>{p.rating ? `★ ${p.rating} · ` : ''}{p.vehicle}{p.vehiclePlate ? ` · Plate ${p.vehiclePlate}` : ''}</Text>
+                <Text style={font.small}>{rated.rating ? `★ ${rated.rating}${rated.count ? ` (${rated.count})` : ''} · ` : ''}{p.vehicle}{p.vehiclePlate ? ` · Plate ${p.vehiclePlate}` : ''}</Text>
                 {p.verified ? <Text style={{ color: colors.success, fontSize: 11, fontWeight: '700' }}>Verified technician</Text> : null}
               </View>
               <Pressable style={[styles.round, { backgroundColor: colors.primary }]} onPress={() => callNumber(p.phone)} accessibilityLabel="Call provider">
@@ -217,6 +221,7 @@ export default function TrackOrderView({ navigation, route }: ScreenProps<'Track
         <Text style={font.small}>Order #{order.id} · {formatQAR(order.quote.total)} · {order.payment === 'cash' ? 'Cash' : 'Card'}</Text>
         {status === 'done' ? <Badge label="Done" tone="success" /> : null}
       </View>
+      {status === 'done' ? <RateTechnicianCard order={order} /> : null}
       {!finished && demo ? (
         <Banner
           icon="flask-outline"

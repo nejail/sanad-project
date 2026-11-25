@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Badge, Card, IconName, IconTile, Screen } from '../../components/ui';
+import { RateTechnicianCard } from '../../components/RateTechnicianCard';
 import { getService } from '../../models/catalog';
 import { formatQAR } from '../../models/pricing';
 import { STATUS_LABEL, isActiveStatus } from '../../models/tracking';
@@ -19,7 +20,7 @@ function dateLabel(iso: string) {
   return d.toDateString() === today.toDateString() ? 'Today' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 }
 
-/** 13 My Orders (tab). Finished orders have "Book again" (V2 feature 15). */
+/** 13 My Orders (tab). Finished orders have "Book again" (V2 feature 15) and, when a SANAD technician did the job, "Rate your technician" (feature 14). */
 export default function OrdersView() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { orders } = useAccount();
@@ -40,7 +41,8 @@ export default function OrdersView() {
       </View>
       {list.length === 0 ? <Text style={[font.body, { textAlign: 'center', marginTop: 30 }]}>No {tab} orders yet.</Text> : null}
       {list.map((o) => (
-        <Card key={o.id} style={styles.row} onPress={() => nav.navigate('TrackOrder', { orderId: o.id })}>
+        <React.Fragment key={o.id}>
+        <Card style={styles.row} onPress={() => nav.navigate('TrackOrder', { orderId: o.id })}>
           <IconTile name={getService(o.serviceId).icon as IconName} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={[font.h3, { fontSize: 15 }]}>{o.title}</Text>
@@ -64,6 +66,8 @@ export default function OrdersView() {
             <Text style={{ color: colors.text, fontWeight: '700' }}>{formatQAR(o.quote.total)}</Text>
           </View>
         </Card>
+        {o.status === 'done' ? <RateTechnicianCard order={o} compact /> : null}
+        </React.Fragment>
       ))}
     </Screen>
   );
