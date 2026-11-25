@@ -70,7 +70,7 @@ The provider side reads and writes `orders/{id}` directly, so it works as soon a
 
 For live tracking (feature 7), set `LIVE_TRACKING_READY = true` in `src/models/tracking.ts` to remove the Demo Mode badge for real-provider orders, and replace `providerProgress` on Track Order with the position from `orders/{id}/tracking/live`. Provider matching (feature 8) can use `providers` with `isOnline` and the `services` each profile lists.
 
-# Hassan's Features (5, 7, 8, 9, 15)
+# Hassan's Features (5, 7, 8, 9, 14, 15)
 
 | # | Feature | Level | Where | How to check |
 |---|---|---|---|---|
@@ -78,9 +78,10 @@ For live tracking (feature 7), set `LIVE_TRACKING_READY = true` in `src/models/t
 | 5 | Orders in Firestore with status history, live for the driver | A | `ordersRepo.ts`, `models/orders.ts`, `AppContext` (`placeOrder`, `setOrderStatus`, live listener) | Development build: place an order. It appears under `orders/` with `customerId`, `providerId: null` and `statusHistory`. A technician on a second phone accepts it and moves it along; the driver's Track Order follows each step with no refresh. |
 | 8 | Nearest available provider matching | A | `matching.ts`, `providerRepo.listenOpenJobs`, `ProviderJobsView` (online switch), rules | Two registered technicians online. The order's `offeredTo` is the nearer one (by road), and only they see it under New requests. Turn them off with **Available for new jobs** (or wait 2 minutes): `offeredTo` changes to the other one and `offeredBefore` lists the first. |
 | 7 | Live tracking from the technician's real location | A | `trackingRepo.ts`, `useShareLocation` (technician), `useLiveTracking` + `TrackOrderView` (driver), `LIVE_TRACKING_READY = true` | Technician taps **Start Driving to Customer**: the job shows "Sharing your live location" and `orders/{id}/tracking/live` updates every few seconds. The driver's van moves to that position within a few seconds and shows "Live location · x km away" with the live ETA. Writing a test `location` GeoPoint in the console moves the van too. No Demo Mode badge for real-technician orders. |
+| 14 | Rate the technician | B | `models/reviews.ts`, `reviewsRepo.ts`, `useReviews.ts`, `RateTechnicianCard`, `TrackOrderView`, `OrdersView`, `ProviderJobsView`, rules | After a job sent to a technician is done, Track Order and Orders show **Rate your technician** (1 to 5 stars, optional comment up to 300 characters). Sending it writes `reviews/{orderId}` once; the card then shows the stars given. The technician's rating on Track Order and in Provider Mode is the average of their reviews, or the profile's `rating` when there are none. |
 | 15 | Book again | B | `rebookDraft` in `models/orders.ts`, `OrdersView` | Orders > Completed > **Book again** opens the service screen with the same option, car and address (for now, ASAP). |
 
-Feature 14 (rate the provider) is not done: updating the technician's rating from the driver's phone needs a rule (or a server function) that checks the order is done and is the driver's, which is not in place yet.
+Feature 14 keeps ratings in their own collection instead of changing the technician's profile, so the rules can check each review against its order: `reviews/{orderId}` holds `orderId`, `providerId`, `customerId`, `stars` (1 to 5), `comment` (or null) and `createdAt`. Only the driver of that order can create it, only when the order is done and `providerId` matches the technician who did it, and nobody can update or delete it, so an order is rated once. Simulated orders and Provider Mode on one phone (`device:` technicians) show no rating card.
 
 ## How the parts connect
 
@@ -88,7 +89,7 @@ Feature 14 (rate the provider) is not done: updating the technician's rating fro
 - **Who gets it.** `dispatch` is `'provider'` when at least one online technician offers the service (`providers` where `isOnline == true`), otherwise `'simulated'`, so a demo never waits forever. The **Send my new orders to Provider Mode** switch still forces `'provider'` for testing on one phone. For `'provider'` orders, the online technicians are ranked by road distance (OSRM, 4 s limit each) from their `lastLocation`, or their `base` when they have not shared a location yet, with the straight line as the fallback, and the order is written with `offeredTo`, `offeredAt` and `offeredBefore`.
 - **Moving on.** Every 15 seconds the driver's phone checks its waiting orders: if the technician went offline or 2 minutes passed, it updates `offeredTo` to the next nearest technician it was not offered to yet (starting again from the nearest once everyone had it). The rules allow the driver to change these fields only while `providerId` is null.
 - **Following the technician.** The driver's phone listens to `orders` where `customerId == uid` and merges them into the phone's orders (`mergeOrders`): orders sent to technicians follow Firestore; simulated orders keep the phone's copy because the phone moves them along, and their status changes are written with an update. After placing, the driver's phone only ever updates the fields it may change (`DRIVER_ORDER_FIELDS`), never `set`, so a technician's acceptance is never overwritten. The car photo URL is written with an update when the upload finishes.
-- **Live location.** While a job is `on_the_way`, the technician's phone watches its location in the foreground (`expo-location`, every 4 s or 10 m) and writes `orders/{id}/tracking/live` (`location`, `heading`, `etaMin`, `updatedAt`) and `providers/{uid}.lastLocation` and `geohash` in one batch. A position older than 2 minutes is ignored and the animation is used instead.
+- **Live location.** While a job is `on_the_way`, the technician's phone watches its location in the foreground (`expo-location`, every 4 s or 10 m) and writes `orders/{id}/tracking/live` (`location`, `heading`, `etaMin`, `updatedAt`) and `providers/{uid}.lastLocation` and `geohash` in one batch. A position older than 2 minutes is ignored and the animation is used instead. Sharing now runs app-wide: `LiveLocationProvider` (in `App.tsx`) watches the technician's own jobs and shares for the one that is on the way, so it keeps going when the technician leaves the job screen. It still stops when the phone is locked or SANAD goes to the background, because only foreground location is used (background location needs `expo-task-manager`, the background location permission and a new build).
 - **Indexes.** Every query uses equality filters only, so no composite index is needed (no `firestore.indexes.json`).
 
 ## Changes to Nasser's files
@@ -98,7 +99,9 @@ Feature 14 (rate the provider) is not done: updating the technician's rating fro
 | `src/models/types.ts`, `src/models/firestore.ts` | `offeredTo`, `offeredAt`, `offeredBefore` on `Order`, `OrderDoc`, `orderToDoc` and `orderFromDoc`. |
 | `src/services/providerRepo.ts` | `listenOpenJobs(uid, ...)` also filters `offeredTo == uid`; `decodeOrder` reads `offeredAt`. |
 | `src/viewModels/useProviderJobs.ts`, `src/views/provider/ProviderJobsView.tsx` | Passes the technician's id to `listenOpenJobs`; adds `setOnline` and an **Available for new jobs** switch. |
-| `src/views/provider/ProviderJobView.tsx` | One line: `useShareLocation(order)`, plus a banner while sharing. |
+| `src/views/provider/ProviderJobView.tsx` | Shows a banner while sharing, read from `useLiveLocation()` (the sharing itself moved to `LiveLocationProvider`). |
+| `src/views/provider/ProviderJobsView.tsx` | Shows the technician's average rating and how many reviews it comes from. |
+| `App.tsx` | Wraps the app in `LiveLocationProvider`. |
 | `src/views/orders/TrackOrderView.tsx` | Uses the live position and ETA when there is one; Demo Mode stays for simulated orders and for Provider Mode on one phone. |
 | `src/models/tracking.ts` | `LIVE_TRACKING_READY = true`. |
 | `src/viewModels/AppContext.tsx` | Order ids, writing and listening to orders, matching, re-offering, Book again. |
@@ -109,6 +112,8 @@ Feature 14 (rate the provider) is not done: updating the technician's rating fro
 
 - A provider reads and accepts an open order only when `offeredTo` is their uid.
 - The driver may change `offeredTo`, `offeredAt` and `offeredBefore` only while `providerId` is null, can never change `dispatch`, and on an order sent to technicians may set the status only to `cancelled`.
+- On an order sent to technicians, the driver may change `statusHistory` only when cancelling, and only by adding one `cancelled` entry at the end (the earlier entries must stay the same).
+- New `reviews/{orderId}` rules for feature 14 (see above).
 
 ### Rules Playground checks (Hassan's features)
 
@@ -129,3 +134,37 @@ Use the console data from the table above (`orders/o1` offered to `provA`), plus
 | 20 | create | `orders/o1/tracking/live` after 3 | `provB` | same | Denied |
 | 21 | get | `orders/o1/tracking/live` | `custA` | | Allowed |
 | 22 | update | `providers/provA` | `provA` | `lastLocation`, `geohash` | Allowed |
+| 23 | update | `orders/o1` | `custA` | `status: "cancelled"`, `statusHistory` + one `cancelled` entry | Allowed |
+| 24 | update | `orders/o1` | `custA` | `statusHistory` rewritten (`confirmed`, `done`) | Denied |
+| 25 | update | `orders/o1` after 3 | `custA` | `status: "cancelled"`, `statusHistory: [cancelled]` (drops entries) | Denied |
+
+For the review checks add `orders/o4` like `o1` after 3 but with `status: "done"`.
+
+| # | Simulation | Location | Auth UID | Body | Expected |
+|---|---|---|---|---|---|
+| 26 | create | `reviews/o4` | `custA` | `orderId: "o4"`, `providerId: "provA"`, `customerId: "custA"`, `stars: 5`, `comment: "Quick"`, `createdAt` (timestamp) | Allowed |
+| 27 | update | `reviews/o4` (exists) | `custA` | `stars: 1` | Denied (rated once) |
+| 28 | delete | `reviews/o4` (exists) | `custA` | | Denied |
+| 29 | create | `reviews/o4` | `custB` | as 26 with `customerId: "custB"` | Denied (not their order) |
+| 30 | create | `reviews/o4` | `custA` | as 26 with `providerId: "provB"` | Denied (wrong technician) |
+| 31 | create | `reviews/o1` | `custA` | as 26 with `orderId: "o1"` | Denied (order not done) |
+| 32 | create | `reviews/o4` | `custA` | as 26 with `stars: 6` | Denied |
+
+## Results (25 Nov 2026)
+
+**Rules.** `firebase/firestore.rules` was published in the console on 25 Nov 2026 at 10:19 (Doha). Cloud Storage was enabled (default bucket `sanad-9d5f6.firebasestorage.app`, no-cost location US-EAST1) and `firebase/storage.rules` was published the same morning.
+
+All 32 checks above were run against `firebase/firestore.rules` in the Firestore emulator (firebase-tools, `@firebase/rules-unit-testing`), with the console data described above written before each check. Actual results: **32 of 32 match the expected result** (Allowed for 1, 3, 7, 12, 15, 17, 19, 21, 22, 23, 26; Denied for all the others). They were not clicked through the console's Rules Playground one by one.
+
+`npm run check:rules` (`scripts/check-rules.ts`) sends the same 32 checks to the Firebase Rules API, but the service account key we use for `seed:services` gets `403 PERMISSION_DENIED` (it lacks `firebaserules.rulesets.test`). It works with a key or account that has the Firebase Rules Admin role.
+
+| # | Feature | Status | Evidence |
+|---|---|---|---|
+| 9 | Prices from Firestore | Partly verified | `npm run seed:services -- --dry-run`, then with `--key`: six documents under `services` (battery, carwash, emergency, fuel, oil, tire), seen in the console. Not verified yet: a console price change showing in the app after relaunch. |
+| 5 | Orders in Firestore | Not verified | Needs the two-phone test. No test technicians are registered yet (`providers` is empty), so no order ids to report. |
+| 8 | Nearest provider matching | Not verified | Same: needs two registered technicians on team phones. |
+| 7 | Live tracking | Not verified | Same. Rules checks 19 to 21 pass. |
+| 14 | Rate the technician | Code and rules done, not verified on phones | Unit tests in `__tests__/reviews.test.ts`; rules checks 26 to 32 pass. Needs a done order from the two-phone test. |
+| 15 | Book again | Not verified on a phone | Unit tests only. |
+
+**Two-phone test still to do:** each tester signs in to SANAD once, then `npm run add:provider -- --phone <8 digits> --name "Test Technician 1" --services battery,tire --key <path to key>` (and `Test Technician 2`). Then place an order from a third phone, record the order id, the phones used and screenshots of Track Order and the console for features 5, 8, 7 and 14.

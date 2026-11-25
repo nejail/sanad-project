@@ -36,10 +36,20 @@ Not working yet:
 
 - **Push notifications with the app closed** are coded but not set up: they need an EAS project id (`npx eas init`) and, on iOS, a paid Apple Developer account. Without them no push is sent.
 - **Android:** the EAS build setup is in place (`npm run build:android`), but it has not been verified on an Android phone yet.
-- **Car photo upload** needs Cloud Storage enabled in the Firebase console, `firebase/storage.rules` published and a fresh development build.
-- **Prices from Firestore** need the `services` collection seeded once (`npm run seed:services -- --key <path to key>`); until then the built-in prices are used.
+- **Car photo upload:** Cloud Storage is now enabled and `firebase/storage.rules` is published (25 Nov 2026). It still needs a fresh development build and has not been tried on a phone yet.
 
-Hassan's Version 2 features: orders are saved in Firestore and follow the technician live on the driver's phone, each new order is offered to the **nearest online technician** (by road) and moves to the next one after 2 minutes, the van on Track Order follows the **technician's live location**, and finished orders have **Book again**. See [docs/version-2.md](docs/version-2.md#hassans-features-5-7-8-9-15).
+Hassan's Version 2 features: orders are saved in Firestore and follow the technician live on the driver's phone, each new order is offered to the **nearest online technician** (by road) and moves to the next one after 2 minutes, the van on Track Order follows the **technician's live location**, and finished orders have **Book again**. Drivers can **rate the technician** after a finished job (stars and an optional comment), and the rating shown is the average of those reviews. The technician's phone keeps sharing its location while the app is open on any screen. See [docs/version-2.md](docs/version-2.md#hassans-features-5-7-8-9-14-15).
+
+Verified so far (25 Nov 2026):
+
+- `firebase/firestore.rules` and `firebase/storage.rules` are published, and all 32 rules checks pass in the Firestore emulator.
+- The six `services` documents are in Firestore (`npm run seed:services -- --key ...`).
+
+Not verified yet:
+
+- The two-phone tests for orders, matching, live tracking and ratings (features 5, 7, 8, 14). No test technicians are registered yet.
+- A price changed in the console showing in the app after relaunch (feature 9), and Book again (feature 15) on a phone.
+- Live location stops when the technician's phone is locked or SANAD is in the background (foreground only for now).
 
 ```bash
 npm run add:provider -- --phone 55550123 --name "Ahmed" --dry-run   # register a technician for Provider Mode (admin)
