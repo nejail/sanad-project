@@ -81,3 +81,12 @@ export function pathFrom(path: Coordinates[], here: Coordinates): Coordinates[] 
   });
   return path.slice(best);
 }
+
+/**
+ * The job whose location the technician's phone should share: their own job that is On the way.
+ * Used by LiveLocationProvider, so sharing runs anywhere in the app, not only on the job screen.
+ */
+export function activeSharingJob<T extends { status: string; provider: { id?: string } }>(jobs: T[], uid: string | null | undefined): T | undefined {
+  if (!uid) return undefined;
+  return jobs.find((j) => j.status === 'on_the_way' && j.provider.id === uid);
+}

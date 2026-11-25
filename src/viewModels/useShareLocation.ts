@@ -12,7 +12,7 @@ import { useApp } from './AppContext';
  * Technician's phone (V2 feature 7): while a job is On the way, watches the phone's location in the
  * foreground and publishes it every few seconds, so the driver's Track Order moves the van for real.
  * Only for a registered technician on their own job in the development build; otherwise it does nothing.
- * ProviderJobView calls it with one line.
+ * LiveLocationProvider calls it for the active job, so it runs anywhere in the app.
  */
 export function useShareLocation(order: Order | undefined): { sharing: boolean; error: string | null } {
   const { uid, dataSource } = useApp();

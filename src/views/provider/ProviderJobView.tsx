@@ -10,7 +10,7 @@ import { formatPhone } from '../../models/validation';
 import { ScreenProps } from '../../navigation/types';
 import { callNumber, openWhatsApp } from '../../services/contact';
 import { useProviderJobs } from '../../viewModels/useProviderJobs';
-import { useShareLocation } from '../../viewModels/useShareLocation';
+import { useLiveLocation } from '../../viewModels/LiveLocationContext';
 import { colors, font } from '../../theme';
 
 /**
@@ -21,7 +21,9 @@ export default function ProviderJobView({ navigation, route }: ScreenProps<'Prov
   const jobs = useProviderJobs();
   const order = jobs.find(route.params.orderId);
   const [busy, setBusy] = useState(false);
-  const location = useShareLocation(order); // live tracking while On the way (V2 feature 7)
+  // Live tracking while On the way (V2 feature 7) runs app-wide in LiveLocationProvider.
+  const live = useLiveLocation();
+  const location = { sharing: !!order && live.orderId === order.id && live.sharing, error: order && live.orderId === order.id ? live.error : null };
 
   if (!order) {
     return (
