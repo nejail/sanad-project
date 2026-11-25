@@ -38,6 +38,9 @@ describe('SMS wait guidance (V2 feature 3)', () => {
     const hint = smsWaitHint(5);
     expect(hint.late).toBe(false);
     expect(hint.detail).toMatch(/within a minute/);
+    // The iPhone offers the code above the keyboard; it is not filled in until the driver taps it.
+    expect(hint.detail).toMatch(/tap the code above the keyboard/);
+    expect(hint.detail).not.toMatch(/automatically/);
   });
   it('gives practical tips once the wait is longer than usual', () => {
     expect(smsWaitHint(SMS_TYPICAL_WAIT_SECONDS - 1).late).toBe(false);
