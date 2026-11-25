@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { geocode } from '../../api/osm';
+import { MapPreview } from '../../components/MapPreview';
 import { Banner, Chip, Field, PrimaryButton, Screen, SectionLabel } from '../../components/ui';
 import { Coordinates } from '../../models/types';
 import { ScreenProps } from '../../navigation/types';
@@ -18,6 +20,9 @@ export default function AddAddressView({ navigation }: ScreenProps<'AddAddress'>
   const [isDefault, setIsDefault] = useState(false);
   const [locating, setLocating] = useState(false);
   const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  // The typed address was not found, so the map is shown to drop a pin.
+  const [needsPin, setNeedsPin] = useState(false);
 
   const locate = async () => {
     setLocating(true);
@@ -33,17 +38,30 @@ export default function AddAddressView({ navigation }: ScreenProps<'AddAddress'>
     }
   };
 
-  const save = () => {
+  /** Typed addresses are looked up on the map; when not found, the driver drops a pin instead. */
+  const save = async () => {
     if (!line.trim()) {
       setError('Enter the address or use your current location.');
       return;
     }
-    addAddress({ label, line: line.trim(), landmark: landmark.trim() || undefined, coords: coords ?? DOHA, isDefault });
+    let at = coords;
+    if (!at) {
+      setSaving(true);
+      setError('');
+      at = (await geocode(line).catch(() => null))?.coords ?? null;
+      setSaving(false);
+    }
+    if (!at) {
+      setNeedsPin(true);
+      setError("We couldn't find that address. Tap the map to show where it is.");
+      return;
+    }
+    addAddress({ label, line: line.trim(), landmark: landmark.trim() || undefined, coords: at, isDefault });
     navigation.goBack();
   };
 
   return (
-    <Screen title="Add New Address" footer={<PrimaryButton label="Add Address" onPress={save} testID="save-address" />}>
+    <Screen title="Add New Address" footer={<PrimaryButton label="Add Address" onPress={save} loading={saving} testID="save-address" />}>
       <SectionLabel>Label</SectionLabel>
       <View style={{ flexDirection: 'row', gap: 8 }}>
         {(['Home', 'Office', 'Other'] as const).map((l) => <Chip key={l} label={l} selected={label === l} onPress={() => setLabel(l)} />)}
@@ -54,6 +72,7 @@ export default function AddAddressView({ navigation }: ScreenProps<'AddAddress'>
         <Text style={{ color: colors.primary, fontWeight: '600' }}>Use My Current Location</Text>
       </Pressable>
       {error ? <Banner tone="danger" text={error} /> : null}
+      {needsPin ? <MapPreview center={coords ?? DOHA} height={180} onPick={(c) => { setCoords(c); setError(''); }} /> : null}
       <Field label="Landmark (optional)" value={landmark} onChangeText={setLandmark} placeholder="e.g. next to the petrol station" />
       <Pressable style={styles.gps} onPress={() => setIsDefault((v) => !v)} accessibilityRole="checkbox" accessibilityState={{ checked: isDefault }}>
         <Ionicons name={isDefault ? 'checkbox' : 'square-outline'} size={20} color={isDefault ? colors.primary : colors.muted} />
