@@ -11,7 +11,7 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 export const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 
@@ -35,6 +35,35 @@ export async function registerPushToken(): Promise<string | null> {
     console.warn('[push] no push token on this build', e);
     return null;
   }
+}
+
+/**
+ * Gets the push token shortly after sign-in (Home asks for notification permission first). If it is not
+ * available yet, tries again each time the app becomes active, which also covers answering the permission
+ * question late or allowing notifications in Settings. Returns a function that stops watching.
+ */
+export function watchPushToken(onToken: (token: string) => void, register: () => Promise<string | null> = registerPushToken): () => void {
+  let stopped = false;
+  let done = false;
+  let busy = false;
+  const attempt = async () => {
+    if (stopped || done || busy) return;
+    busy = true;
+    const token = await register().catch(() => null);
+    busy = false;
+    if (stopped || !token) return;
+    done = true;
+    onToken(token);
+  };
+  const timer = setTimeout(attempt, 3000);
+  const sub = AppState.addEventListener('change', (s) => {
+    if (s === 'active') attempt();
+  });
+  return () => {
+    stopped = true;
+    clearTimeout(timer);
+    sub.remove();
+  };
 }
 
 /** The message body Expo's push service expects. */

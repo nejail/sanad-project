@@ -158,3 +158,63 @@ describe('push to the driver with the app closed (V2 feature 12)', () => {
     }
   });
 });
+
+import { AppState } from 'react-native';
+import { pinnedCoords } from '../src/models/location';
+import { includesOrderPush, isOrderPush } from '../src/services/notifications';
+import { watchPushToken } from '../src/services/push';
+
+describe('real car position (V2 feature 2)', () => {
+  it('ignores the Doha fallback on older described orders', () => {
+    const address = { id: 'searched', label: 'Described location', line: 'Salwa Road', coords: { latitude: 25.22, longitude: 51.43 }, isDefault: false };
+    expect(pinnedCoords(address)).toEqual(address.coords);
+    expect(pinnedCoords({ ...address, id: 'described' })).toBeUndefined();
+    expect(pinnedCoords(undefined)).toBeUndefined();
+  });
+});
+
+describe('no double alerts (V2 feature 12)', () => {
+  const push = { trigger: { type: 'push' }, content: { data: { orderId: 'SND-1', status: 'accepted' } } };
+  it('tells an order push from a local notification', () => {
+    expect(isOrderPush(push)).toBe(true);
+    expect(isOrderPush({ trigger: null, content: { data: {} } })).toBe(false);
+    expect(isOrderPush({ trigger: { type: 'push' }, content: { data: null } })).toBe(false);
+  });
+  it('matches the same order and status only', () => {
+    expect(includesOrderPush([push], 'SND-1', 'accepted')).toBe(true);
+    expect(includesOrderPush([push], 'SND-1', 'arrived')).toBe(false);
+    expect(includesOrderPush([push], 'SND-2', 'accepted')).toBe(false);
+  });
+});
+
+describe('push token when notifications are allowed late (V2 feature 12)', () => {
+  it('tries again each time the app becomes active, until it has a token', async () => {
+    jest.useFakeTimers();
+    let change: (s: 'active' | 'background') => void = () => undefined;
+    const remove = jest.fn();
+    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, fn: typeof change) => {
+      change = fn;
+      return { remove };
+    }) as never);
+    try {
+      const register = jest.fn().mockResolvedValueOnce(null).mockResolvedValue('token-1');
+      const onToken = jest.fn();
+      const stop = watchPushToken(onToken, register);
+      await jest.advanceTimersByTimeAsync(3000);
+      expect(register).toHaveBeenCalledTimes(1);
+      expect(onToken).not.toHaveBeenCalled();
+      change('background');
+      change('active');
+      await jest.advanceTimersByTimeAsync(0);
+      expect(onToken).toHaveBeenCalledWith('token-1');
+      change('active');
+      await jest.advanceTimersByTimeAsync(0);
+      expect(register).toHaveBeenCalledTimes(2);
+      stop();
+      expect(remove).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+      jest.useRealTimers();
+    }
+  });
+});

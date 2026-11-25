@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import * as Haptics from 'expo-haptics';
 import { statusNotification } from '../models/tracking';
 import { OrderStatus } from '../models/types';
-import { notify } from '../services/notifications';
+import { notify, pushAlreadyShown } from '../services/notifications';
 import { useApp } from '../viewModels/AppContext';
 
 /**
@@ -28,7 +28,10 @@ export function OrderStatusWatcher() {
       if (first || before === undefined || before === order.status) continue;
       const message = statusNotification(order, order.status, order.provider.etaMin);
       if (!message) continue;
-      notify(message.title, message.body);
+      // Back from a closed app, the push may have said this already.
+      pushAlreadyShown(order.id, order.status).then((shown) => {
+        if (!shown) notify(message.title, message.body);
+      });
       if (order.status === 'accepted') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
     }
     seen.current = known;
