@@ -6,7 +6,9 @@
  *   npm run check:rules -- --key ~/sanad-key.json              # run every check, publish nothing
  *   npm run check:rules -- --key ~/sanad-key.json --publish    # run, then publish Firestore and Storage rules if all pass
  *
- * Uses the same service account key as seed:services. Keep the key out of the repo.
+ * Needs a key whose service account has the Firebase Rules Admin role (firebaserules.rulesets.test,
+ * and .create/.releases for --publish). The default Admin SDK key used for seed:services gets a 403.
+ * Keep the key out of the repo.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
