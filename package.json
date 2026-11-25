@@ -60,7 +60,8 @@
     "build:android": "eas build --platform android --profile development",
     "go": "expo start --go",
     "seed:services": "tsx scripts/seed-services.ts",
-    "add:provider": "tsx scripts/add-provider.ts"
+    "add:provider": "tsx scripts/add-provider.ts",
+    "check:rules": "tsx scripts/check-rules.ts"
   },
   "private": true,
   "jest": {
