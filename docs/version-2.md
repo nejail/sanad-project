@@ -150,7 +150,7 @@ For the review checks add `orders/o4` like `o1` after 3 but with `status: "done"
 | 31 | create | `reviews/o1` | `custA` | as 26 with `orderId: "o1"` | Denied (order not done) |
 | 32 | create | `reviews/o4` | `custA` | as 26 with `stars: 6` | Denied |
 
-## Results (25 Nov 2026)
+## Results (25 and 28 Nov 2026)
 
 **Rules.** `firebase/firestore.rules` was published in the console on 25 Nov 2026 at 10:19 (Doha). Cloud Storage was enabled (default bucket `sanad-9d5f6.firebasestorage.app`, no-cost location US-EAST1) and `firebase/storage.rules` was published the same morning.
 
@@ -161,10 +161,11 @@ All 32 checks above were run against `firebase/firestore.rules` in the Firestore
 | # | Feature | Status | Evidence |
 |---|---|---|---|
 | 9 | Prices from Firestore | Partly verified | `npm run seed:services -- --dry-run`, then with `--key`: six documents under `services` (battery, carwash, emergency, fuel, oil, tire), seen in the console. Not verified yet: a console price change showing in the app after relaunch. |
-| 5 | Orders in Firestore | Not verified | Needs the two-phone test. No test technicians are registered yet (`providers` is empty), so no order ids to report. |
-| 8 | Nearest provider matching | Not verified | Same: needs two registered technicians on team phones. |
-| 7 | Live tracking | Not verified | Same. Rules checks 19 to 21 pass. |
-| 14 | Rate the technician | Code and rules done, not verified on phones | Unit tests in `__tests__/reviews.test.ts`; rules checks 26 to 32 pass. Needs a done order from the two-phone test. |
+| 5 | Orders in Firestore | Verified on phones (28 Nov) | Orders SND-1043-VQHV to SND-1046-VQHV: each has `customerId`, `dispatch: "provider"`, `providerId`, the technician's details after accepting, and a `statusHistory` from confirmed to done. The driver's Track Order followed each step without a refresh. |
+| 8 | Nearest provider matching | Verified on phones (28 Nov) | Technician 2's `base` was moved to Al Wakrah so the two were at different distances. SND-1043 and SND-1044 were offered to Technician 1 (the nearer). SND-1045 went straight to Technician 2 while Technician 1 was offline. SND-1046 was offered to Technician 1, who then went offline: `offeredTo` moved to Technician 2 and `offeredBefore` lists Technician 1. |
+| 7 | Live tracking | Verified on phones (28 Nov) | First run (SND-1043 to SND-1045): nothing was written because the technicians' phones did not allow location. After allowing location (While Using, Precise), SND-1046 wrote `orders/SND-1046-VQHV/tracking/live` (`location`, `etaMin`, `updatedAt`) and Technician 2's `lastLocation` and `geohash`. Still foreground only. |
+| 14 | Rate the technician | Verified on phones (28 Nov) | `reviews/SND-1043-VQHV`, `SND-1044-VQHV` and `SND-1045-VQHV` were created by the driver (5 stars each), one per order. |
+| 13 | Car photo upload | Verified on phones (28 Nov) | Each of SND-1043 to SND-1046 has `photoPath` under `order-photos/{uid}/` and a `photoUrl`, and the photo showed on the technician's job. |
 | 15 | Book again | Not verified on a phone | Unit tests only. |
 
-**Two-phone test still to do:** each tester signs in to SANAD once, then `npm run add:provider -- --phone <8 digits> --name "Test Technician 1" --services battery,tire --key <path to key>` (and `Test Technician 2`). Then place an order from a third phone, record the order id, the phones used and screenshots of Track Order and the console for features 5, 8, 7 and 14.
+**Three-phone test (28 Nov 2026):** Hassan was the driver, Nasser was Test Technician 1 (plate 1111) and Mohammed was Test Technician 2 (plate 2222), all on the iOS Release build installed from Xcode. Order ids: SND-1043-VQHV, SND-1044-VQHV, SND-1045-VQHV, SND-1046-VQHV.
