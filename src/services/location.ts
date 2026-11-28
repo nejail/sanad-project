@@ -1,7 +1,8 @@
 import * as Location from 'expo-location';
+import { DOHA } from '../models/location';
 import { Coordinates } from '../models/types';
 
-export const DOHA: Coordinates = { latitude: 25.2854, longitude: 51.531 };
+export { DOHA };
 
 export interface CurrentPlace {
   coords: Coordinates;

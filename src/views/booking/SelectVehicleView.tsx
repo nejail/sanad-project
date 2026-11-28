@@ -20,6 +20,7 @@ export default function SelectVehicleView({ navigation }: ScreenProps<'SelectVeh
       title="Select Vehicle"
       footer={<PrimaryButton label="Continue" disabled={!draft.carId} onPress={() => navigation.navigate('Schedule')} testID="vehicle-continue" />}
     >
+      {cars.length === 0 ? <Text style={font.body}>Add your car so the technician knows what to expect.</Text> : null}
       {cars.map((c) => (
         <Card key={c.id} selected={draft.carId === c.id} onPress={() => updateDraft({ carId: c.id })} style={styles.row} testID="vehicle-row">
           <IconTile name="car-outline" />

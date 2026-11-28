@@ -1,7 +1,7 @@
 import overpass from './fixtures/overpass-garages.json';
 import osrm from './fixtures/osrm-route.json';
 import nominatim from './fixtures/nominatim-garages.json';
-import { buildNominatimUrl, buildOverpassQuery, parseNominatim, parseOsrmRoute, parseOverpass, pointAlongPath } from '../src/api/osm';
+import { buildGeocodeUrl, buildNominatimUrl, buildOverpassQuery, geocode, geocodeQueries, parseGeocode, parseNominatim, parseOsrmRoute, parseOverpass, pointAlongPath } from '../src/api/osm';
 
 const CMUQ = { latitude: 25.3155, longitude: 51.439 };
 
@@ -121,5 +121,34 @@ describe('Nominatim parsing', () => {
     expect(url).toContain('q=car%20repair');
     expect(url).toContain('bounded=1');
     expect(url).toContain('countrycodes=qa');
+  });
+});
+
+describe('typed location lookup (V2 feature 2)', () => {
+  const salwa = [{ lat: '25.2236', lon: '51.4280', display_name: 'Salwa Road, Fereej Al Manaseer, Al Rayyan, Qatar' }];
+
+  it('drops extra directions step by step', () => {
+    expect(geocodeQueries(' Salwa Road exit 12,  by the petrol station ')).toEqual([
+      'Salwa Road exit 12, by the petrol station', 'Salwa Road exit 12', 'Salwa Road',
+    ]);
+    expect(geocodeQueries('Villaggio near gate 3')).toEqual(['Villaggio near gate 3', 'Villaggio']);
+    expect(geocodeQueries('Bypass Road')).toEqual(['Bypass Road']);
+  });
+
+  it('uses the first search that finds something', async () => {
+    const asked: string[] = [];
+    const found = await geocode('Salwa Road exit 12, by the petrol station', async (url) => {
+      asked.push(url);
+      return url === buildGeocodeUrl('Salwa Road') ? salwa : [];
+    });
+    expect(asked).toHaveLength(3);
+    expect(found).toEqual({ name: 'Salwa Road, Fereej Al Manaseer', coords: { latitude: 25.2236, longitude: 51.428 } });
+    expect(buildGeocodeUrl('Salwa Road')).toContain('countrycodes=qa');
+  });
+
+  it('never makes up a position', async () => {
+    expect(await geocode('xyzxyz', async () => [])).toBeNull();
+    expect(parseGeocode([{ lat: '51.5', lon: '-0.12', display_name: 'London' }, { display_name: 'No coordinates' }])).toBeNull();
+    await expect(geocode('Salwa Road', async () => { throw new Error('offline'); })).rejects.toThrow('offline');
   });
 });

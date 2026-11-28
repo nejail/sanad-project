@@ -15,7 +15,7 @@
  *   orders/{orderId}/tracking/live       TrackingDoc  (written by the provider app every few seconds)
  *   reviews/{reviewId}                   ReviewDoc
  */
-import { Address, Car, Order, OrderStatus, Quote, ServiceDefinition, ServiceId, ServiceOption, User } from './types';
+import { Address, Car, Order, OrderStatus, Provider, Quote, ServiceDefinition, ServiceId, ServiceOption, StatusChange, User } from './types';
 
 /** Stand-ins for Firestore's GeoPoint and Timestamp so the models compile without the SDK. */
 export interface GeoPointLike {
@@ -71,6 +71,7 @@ export interface ProviderDoc {
   services: ServiceId[];
   phone: string;
   vehicle: string;
+  vehiclePlate?: string;
   rating: number;
   ratingCount: number;
   base: GeoPointLike;
@@ -81,6 +82,16 @@ export interface ProviderDoc {
 
 export type ServiceDoc = Omit<ServiceDefinition, 'id'> & { active: boolean };
 
+/** The technician's details copied onto the order when they accept it (what the driver sees). */
+export interface OrderProviderDoc {
+  name: string;
+  phone: string; // E.164
+  vehicle: string;
+  vehiclePlate: string | null;
+  rating: number;
+  verified: boolean;
+}
+
 export interface OrderDoc {
   customerId: string;
   providerId: string | null; // null until a provider accepts
@@ -88,18 +99,31 @@ export interface OrderDoc {
   optionId: string;
   title: string;
   car: { id: string; label: string };
-  address: { label: string; line: string; location: GeoPointLike };
+  address: { label: string; line: string; landmark?: string | null; location: GeoPointLike };
   schedule: { kind: 'asap' | 'later'; date: string | null; time: string | null };
   quote: Quote & { currency: 'QAR' };
   payment: { method: 'cash' | 'card'; status: 'unpaid' | 'paid' };
   promoApplied: boolean;
   towTo: { name: string; location: GeoPointLike; distanceKm: number } | null;
-  photoPath: string | null; // Cloud Storage path, e.g. orders/{orderId}/photo.jpg
+  photoPath: string | null; // Cloud Storage path, e.g. order-photos/{uid}/{orderId}.jpg
+  photoUrl?: string | null; // download URL the technician opens
   notes: string | null;
   status: OrderStatus;
   statusHistory: { status: OrderStatus; at: TimestampLike }[];
   createdAt: TimestampLike;
   updatedAt: TimestampLike;
+  /** 'provider' when a technician accepts it in Provider Mode; 'simulated' for the prototype technician. */
+  dispatch?: 'simulated' | 'provider';
+  provider?: OrderProviderDoc | null; // set when a provider accepts
+  acceptedAt?: TimestampLike | null;
+  customerName?: string | null;
+  customerPhone?: string | null; // E.164, so the technician can call the driver
+  customerPushToken?: string | null; // Expo push token for status notifications with the app closed
+  /** Nearest online technician the job is offered to; only they can see and accept it (V2 feature 8). */
+  offeredTo?: string | null;
+  offeredAt?: TimestampLike | null;
+  /** Technicians it was offered to before (moved on after 2 minutes or when they went offline). */
+  offeredBefore?: string[];
 }
 
 export interface TrackingDoc {
@@ -155,7 +179,8 @@ export function addressFromDoc(id: string, d: AddressDoc): Address {
   return { id, label: d.label, line: d.line, landmark: d.landmark ?? undefined, coords: d.location, isDefault: d.isDefault };
 }
 
-export function orderToDoc(o: Order, customerId: string, providerId: string | null = null): OrderDoc {
+export function orderToDoc(o: Order, customerId: string, providerId: string | null = o.provider.id ?? null): OrderDoc {
+  const statusHistory = o.statusHistory?.length ? o.statusHistory : [{ status: o.status, at: o.createdAt }];
   return {
     customerId,
     providerId,
@@ -163,18 +188,91 @@ export function orderToDoc(o: Order, customerId: string, providerId: string | nu
     optionId: o.optionId,
     title: o.title,
     car: { id: o.carId, label: o.carLabel },
-    address: { label: o.address.label, line: o.address.line, location: o.address.coords },
+    address: { label: o.address.label, line: o.address.line, landmark: o.address.landmark ?? null, location: o.address.coords },
     schedule: { kind: o.schedule.kind, date: o.schedule.date ?? null, time: o.schedule.time ?? null },
     quote: { ...o.quote, currency: 'QAR' },
     payment: { method: o.payment, status: 'unpaid' },
     promoApplied: !!o.promoApplied,
     towTo: o.towTo ? { name: o.towTo.name, location: o.towTo.coords, distanceKm: o.towTo.distanceKm } : null,
-    photoPath: o.photoUri ? `orders/${o.id}/photo.jpg` : null,
+    photoPath: o.photoPath ?? (o.photoUri ? `orders/${o.id}/photo.jpg` : null),
+    photoUrl: o.photoUrl ?? null,
     notes: o.notes ?? null,
     status: o.status,
-    statusHistory: [{ status: o.status, at: o.createdAt }],
+    statusHistory,
     createdAt: o.createdAt,
-    updatedAt: o.createdAt,
+    updatedAt: statusHistory[statusHistory.length - 1].at,
+    dispatch: o.dispatch ?? 'simulated',
+    provider: providerId ? providerToOrderDoc(o.provider) : null,
+    acceptedAt: o.acceptedAt ?? null,
+    customerName: o.customerName ?? null,
+    customerPhone: o.customerPhone ? toE164(o.customerPhone) : null,
+    customerPushToken: o.customerPushToken ?? null,
+    offeredTo: o.offeredTo ?? null,
+    offeredAt: o.offeredAt ?? null,
+    offeredBefore: o.offeredBefore ?? [],
+  };
+}
+
+/** The technician details stored on an order (Firestore rejects undefined, so missing values are null). */
+export function providerToOrderDoc(p: Provider): OrderProviderDoc {
+  return {
+    name: p.name,
+    phone: p.phone.startsWith('+') ? p.phone : toE164(p.phone),
+    vehicle: p.vehicle,
+    vehiclePlate: p.vehiclePlate ?? null,
+    rating: p.rating,
+    verified: !!p.verified,
+  };
+}
+
+/** Placeholder shown for an order no technician has accepted yet. */
+export const UNASSIGNED_PROVIDER: Provider = { name: 'Waiting for a technician', rating: 0, vehicle: '', phone: '' };
+
+/**
+ * Reads an orders/{orderId} document back into the app's Order (dates as ISO strings and
+ * locations as plain coordinates, see decodeOrder in providerRepo.ts for Firestore types).
+ */
+export function orderFromDoc(id: string, d: OrderDoc): Order {
+  const history: StatusChange[] = (d.statusHistory ?? []).map((h) => ({ status: h.status, at: h.at }));
+  const provider: Provider = d.provider
+    ? {
+      id: d.providerId ?? undefined,
+      name: d.provider.name,
+      phone: d.provider.phone,
+      vehicle: d.provider.vehicle,
+      vehiclePlate: d.provider.vehiclePlate ?? undefined,
+      rating: d.provider.rating,
+      verified: d.provider.verified,
+    }
+    : UNASSIGNED_PROVIDER;
+  return {
+    id,
+    serviceId: d.serviceId,
+    optionId: d.optionId,
+    title: d.title,
+    carId: d.car.id,
+    carLabel: d.car.label,
+    address: { id: `order-${id}`, label: d.address.label, line: d.address.line, landmark: d.address.landmark ?? undefined, coords: d.address.location, isDefault: false },
+    schedule: { kind: d.schedule.kind, date: d.schedule.date ?? undefined, time: d.schedule.time ?? undefined },
+    quote: { lines: d.quote.lines, subtotal: d.quote.subtotal, vat: d.quote.vat, total: d.quote.total, isEstimate: d.quote.isEstimate },
+    payment: d.payment.method,
+    notes: d.notes ?? undefined,
+    promoApplied: d.promoApplied,
+    towTo: d.towTo ? { id: d.towTo.name, name: d.towTo.name, coords: d.towTo.location, distanceKm: d.towTo.distanceKm } : undefined,
+    status: d.status,
+    statusHistory: history,
+    createdAt: d.createdAt,
+    provider,
+    dispatch: d.dispatch ?? 'simulated',
+    acceptedAt: d.acceptedAt ?? undefined,
+    photoPath: d.photoPath ?? undefined,
+    photoUrl: d.photoUrl ?? undefined,
+    customerName: d.customerName ?? undefined,
+    customerPhone: d.customerPhone ? fromE164(d.customerPhone) : undefined,
+    customerPushToken: d.customerPushToken ?? undefined,
+    offeredTo: d.offeredTo ?? undefined,
+    offeredAt: d.offeredAt ?? undefined,
+    offeredBefore: d.offeredBefore?.length ? d.offeredBefore : undefined,
   };
 }
 

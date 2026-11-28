@@ -1,0 +1,22 @@
+rules_version = '2';
+// Cloud Storage rules for SANAD (V2 feature 13).
+// Publish: Firebase console > Storage > Rules, paste this file, Publish.
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Car photos attached to orders. A driver uploads only into their own folder, only images
+    // under 5 MB. The technician opens the photo through the download URL saved on the order,
+    // so nobody else can list or read the folder directly.
+    match /order-photos/{uid}/{fileName} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Everything else is closed.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

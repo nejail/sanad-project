@@ -42,17 +42,57 @@ service cloud.firestore {
     // Catalogue is public to signed-in users, edited only from the admin console.
     match /services/{serviceId} { allow read: if signedIn(); allow write: if false; }
 
-    // Providers are readable by signed-in users; each provider edits only their own document.
+    // Providers are readable by signed-in users. Profiles are added by an admin (scripts/add-provider.ts);
+    // a provider can only switch themselves online or offline and share their location.
     match /providers/{providerId} {
       allow read: if signedIn();
-      allow update: if isUser(providerId);
+      allow update: if isUser(providerId)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isOnline', 'lastLocation', 'geohash']);
     }
 
-    // Orders: customer creates and reads their own; the assigned provider reads and updates status.
+    // Orders: the customer creates and reads their own. Each open order is offered to the nearest
+    // online provider only (offeredTo, V2 feature 8); that provider sees it, accepts it for themselves,
+    // then moves it along one step at a time (V2 feature 4).
     match /orders/{orderId} {
-      allow create: if signedIn() && request.resource.data.customerId == request.auth.uid;
-      allow read: if signedIn() && (resource.data.customerId == request.auth.uid || resource.data.providerId == request.auth.uid);
-      allow update: if signedIn() && (resource.data.customerId == request.auth.uid || resource.data.providerId == request.auth.uid);
+      function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+      function isCustomer() { return signedIn() && resource.data.customerId == request.auth.uid; }
+      function isAssigned() { return signedIn() && resource.data.providerId == request.auth.uid; }
+      function isOpen() { return resource.data.dispatch == 'provider' && resource.data.providerId == null && resource.data.status == 'confirmed'; }
+      function offeredToMe() { return resource.data.get('offeredTo', null) == request.auth.uid; }
+      // On an order sent to technicians, the driver may only add one cancelled entry to the history.
+      function onlyAddsCancelled() {
+        let before = resource.data.get('statusHistory', []);
+        let after = request.resource.data.get('statusHistory', []);
+        return after.size() == before.size() + 1
+          && after[0:before.size()] == before
+          && after[before.size()].status == 'cancelled';
+      }
+      function nextStep(from, to) {
+        return (from == 'accepted' && to == 'on_the_way') || (from == 'on_the_way' && to == 'arrived') || (from == 'arrived' && to == 'done');
+      }
+
+      allow create: if signedIn() && request.resource.data.customerId == request.auth.uid
+        && request.resource.data.providerId == null;
+      allow read: if isCustomer() || isAssigned() || (isProvider() && resource.data.providerId == null && offeredToMe());
+      allow update: if
+        // The customer updates their own order but cannot assign or impersonate a technician. They may
+        // offer it to the next technician only while no one has accepted it, and on an order sent to
+        // technicians the only status they may set themselves is cancelled, adding one cancelled entry
+        // to the status history without rewriting the rest.
+        (isCustomer() && !changed().hasAny(['customerId', 'providerId', 'provider', 'acceptedAt', 'dispatch'])
+          && (!changed().hasAny(['offeredTo', 'offeredAt', 'offeredBefore']) || resource.data.providerId == null)
+          && (resource.data.get('dispatch', 'simulated') != 'provider'
+            || ((!changed().hasAny(['status']) || request.resource.data.status == 'cancelled')
+              && (!changed().hasAny(['statusHistory']) || (request.resource.data.status == 'cancelled' && onlyAddsCancelled())))))
+        // The provider the order is offered to accepts it, for themselves only. A second provider
+        // accepting the same order is refused because providerId is no longer null.
+        || (isProvider() && isOpen() && offeredToMe()
+          && request.resource.data.providerId == request.auth.uid
+          && request.resource.data.status == 'accepted'
+          && changed().hasOnly(['providerId', 'provider', 'status', 'acceptedAt', 'statusHistory', 'updatedAt']))
+        // The assigned provider moves the job one step: on the way, arrived, done.
+        || (isAssigned() && nextStep(resource.data.status, request.resource.data.status)
+          && changed().hasOnly(['status', 'statusHistory', 'updatedAt']));
 
       // Live location is written by the assigned provider and read by the customer.
       match /tracking/{doc} {
@@ -62,9 +102,27 @@ service cloud.firestore {
       }
     }
 
-    match /reviews/{reviewId} {
+    // Reviews (V2 feature 14): one per order, with the order id as the document id. The driver of a
+    // done order rates the technician who did it; nobody can change or delete a review afterwards,
+    // so a second rating of the same order is refused.
+    match /reviews/{orderId} {
+      function order() { return get(/databases/$(database)/documents/orders/$(orderId)).data; }
+      function r() { return request.resource.data; }
       allow read: if signedIn();
-      allow create: if signedIn() && request.resource.data.customerId == request.auth.uid;
+      allow create: if signedIn()
+        && r().keys().hasOnly(['orderId', 'providerId', 'customerId', 'stars', 'comment', 'createdAt'])
+        && r().keys().hasAll(['orderId', 'providerId', 'customerId', 'stars', 'createdAt'])
+        && r().customerId == request.auth.uid
+        && r().orderId == orderId
+        && r().stars is int && r().stars >= 1 && r().stars <= 5
+        && (r().get('comment', null) == null || (r().comment is string && r().comment.size() <= 300))
+        && r().createdAt is timestamp
+        && exists(/databases/$(database)/documents/orders/$(orderId))
+        && order().customerId == request.auth.uid
+        && order().status == 'done'
+        && order().providerId != null
+        && r().providerId == order().providerId;
+      allow update, delete: if false;
     }
   }
 }

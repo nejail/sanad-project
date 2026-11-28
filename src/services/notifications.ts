@@ -9,16 +9,40 @@ import * as Notifications from 'expo-notifications';
  */
 let configured = false;
 
+type PushLike = { trigger?: unknown; content: { data?: Record<string, unknown> | null } };
+
+/** True for a push about an order (sent by the technician's phone), not for local notifications. */
+export function isOrderPush(request: PushLike): boolean {
+  const type = (request.trigger as { type?: string } | null | undefined)?.type;
+  return type === 'push' && typeof request.content.data?.orderId === 'string';
+}
+
+/** True when one of these notifications is the push for this order and status. */
+export function includesOrderPush(requests: PushLike[], orderId: string, status: string): boolean {
+  return requests.some((r) => isOrderPush(r) && r.content.data?.orderId === orderId && r.content.data?.status === status);
+}
+
+/** True when the driver already got this update as a push while SANAD was closed (still listed, or just tapped). */
+export async function pushAlreadyShown(orderId: string, status: string): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  try {
+    const shown = (await Notifications.getPresentedNotificationsAsync()).map((n) => n.request);
+    const tapped = Notifications.getLastNotificationResponse()?.notification.request;
+    return includesOrderPush(tapped ? [...shown, tapped] : shown, orderId, status);
+  } catch {
+    return false;
+  }
+}
+
 export function configureNotifications() {
   if (configured || Platform.OS === 'web') return;
   configured = true;
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true,
-      shouldShowList: true,
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-    }),
+    // While SANAD is open, OrderStatusWatcher announces order updates, so the push for the same update stays silent.
+    handleNotification: async (n) => {
+      const show = !isOrderPush(n.request);
+      return { shouldShowBanner: show, shouldShowList: show, shouldPlaySound: show, shouldSetBadge: false };
+    },
   });
   if (Platform.OS === 'android') {
     Notifications.setNotificationChannelAsync('default', {

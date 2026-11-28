@@ -26,6 +26,8 @@ import TrackOrderView from '../views/orders/TrackOrderView';
 import MyAddressesView from '../views/profile/MyAddressesView';
 import AddAddressView from '../views/profile/AddAddressView';
 import FeasibilityTestsView from '../views/profile/FeasibilityTestsView';
+import ProviderJobsView from '../views/provider/ProviderJobsView';
+import ProviderJobView from '../views/provider/ProviderJobView';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -66,10 +68,12 @@ function Tabs() {
  * Entry flow agreed in the Sprint 2 supervision meeting:
  *  Splash -> (session found) Home with registered cars loaded
  *  Splash -> (no session) Sign in / Register -> OTP -> new user: Add First Car, returning user: Home
+ *  Add First Car -> Skip for now -> Home (the car is asked for again when booking)
  */
 export default function RootNavigator() {
-  const { status, account } = useApp();
-  const needsFirstCar = status === 'signedIn' && (account?.cars.length ?? 0) === 0;
+  const { status, account, skippedFirstCar } = useApp();
+  // A driver without a car starts on Add Your First Car, unless they chose "Skip for now".
+  const needsFirstCar = status === 'signedIn' && (account?.cars.length ?? 0) === 0 && !skippedFirstCar;
 
   return (
     <NavigationContainer theme={theme}>
@@ -98,6 +102,8 @@ export default function RootNavigator() {
             <Stack.Screen name="MyAddresses" component={MyAddressesView} />
             <Stack.Screen name="AddAddress" component={AddAddressView} />
             <Stack.Screen name="FeasibilityTests" component={FeasibilityTestsView} />
+            <Stack.Screen name="ProviderJobs" component={ProviderJobsView} />
+            <Stack.Screen name="ProviderJob" component={ProviderJobView} />
           </Stack.Group>
         )}
       </Stack.Navigator>

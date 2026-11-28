@@ -4,12 +4,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { Banner, Card, IconTile, LinkText, OptionRow, PriceSummary, PrimaryButton, Radio, Row, Screen, SectionLabel } from '../../components/ui';
 import { SERVICE_PLACE_KIND, fetchRoute } from '../../api/osm';
 import { orderTitle } from '../../models/catalog';
-import { frequentGarages, usedGarageLabel } from '../../models/garages';
+import { frequentGarages, roadKm, usedGarageLabel } from '../../models/garages';
+import { pinnedCoords } from '../../models/location';
 import { buildQuote, distanceKm as straightKm, isFirstWashFree } from '../../models/pricing';
 import { PlaceRef } from '../../models/types';
 import { ScreenProps } from '../../navigation/types';
 import { useAccount, useApp } from '../../viewModels/AppContext';
 import { useNearbyPlaces } from '../../viewModels/useNearbyPlaces';
+import { useNearestGarage } from '../../viewModels/useNearestGarage';
 import { colors, font } from '../../theme';
 
 /**
@@ -27,16 +29,14 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
   const optionId = draft.optionId!;
   const car = cars.find((c) => c.id === draft.carId);
   const towing = serviceId === 'emergency' && optionId === 'towing';
-  const center = draft.address?.coords;
+  const center = pinnedCoords(draft.address);
 
   // Nearest business that can do this service, with driving time to the customer.
   const providers = useNearbyPlaces(center, SERVICE_PLACE_KIND[serviceId], { limit: 3, withRoutes: 1, direction: 'toCustomer' });
   // For towing: the closest garages with the real driving distance, so the nearest by road can be chosen.
-  const garages = useNearbyPlaces(center, 'garage', { limit: 3, withRoutes: 3, direction: 'fromCustomer', enabled: towing });
-  const nearestGarage = useMemo(
-    () => [...garages.places].sort((a, b) => (a.route?.distanceKm ?? a.distanceKm) - (b.route?.distanceKm ?? b.distanceKm))[0],
-    [garages.places],
-  );
+  // Usually already found on the Service screen (the tow price includes the distance from the start).
+  const garages = useNearestGarage(center, towing);
+  const nearestGarage = garages.nearest;
   // Garages this driver towed to before, most used first (student feedback).
   const usedGarages = useMemo(() => frequentGarages(orders).filter((g) => g.id !== nearestGarage?.id), [orders, nearestGarage?.id]);
   const [routing, setRouting] = useState(false);
@@ -59,7 +59,7 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
   function chooseNearest() {
     const g = nearestGarage;
     if (!g) return;
-    const km = g.route?.distanceKm ?? g.distanceKm;
+    const km = roadKm(g);
     updateDraft({ towTo: { id: g.id, name: g.name, coords: g.coords, phone: g.phone, distanceKm: km }, distanceKm: km });
   }
 
@@ -164,7 +164,7 @@ export default function ReviewOrderView({ navigation }: ScreenProps<'ReviewOrder
         </>
       ) : null}
 
-      <PriceSummary quote={quote} />
+      <PriceSummary quote={quote} totalLabel={towing && draft.distanceKm != null ? 'Estimated total' : undefined} />
       <SectionLabel>Payment</SectionLabel>
       <OptionRow icon="cash-outline" title="Cash on Service" subtitle="Pay when the technician arrives" selected={draft.payment === 'cash'} onPress={() => updateDraft({ payment: 'cash' })} />
       <OptionRow icon="card-outline" title="Card Payment" subtitle="Coming soon" selected={false} disabled onPress={() => undefined} />

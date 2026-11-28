@@ -26,7 +26,33 @@ npm run typecheck   # TypeScript strict mode
 npx expo start --web  # browser preview (maps, secure store, haptics, Firebase are stubbed)
 ```
 
-Sprint 4 task prompts for teammates: [docs/prompts](docs/prompts).
+## Version 2 (after Sprint 5 user testing)
+
+Nasser's Version 2 features: the tow price shows the distance from the first price screen, a large **Enter Location Manually** button appears when GPS fails, the SMS wait is explained, new drivers can **Skip for now** on Add Car, Track Order shows a clear **Accepted** step with the technician's details and a **Demo Mode** badge, and **Provider Mode** (Profile) lets a technician accept a job and update its status. The driver gets in-app notifications when the technician accepts, sets off and arrives, and the car photo is uploaded to Cloud Storage.
+
+Not working yet:
+
+- **Push notifications with the app closed** are coded but not set up: they need an EAS project id (`npx eas init`) and, on iOS, a paid Apple Developer account. Without them no push is sent.
+- **Android:** the app code is shared with iOS and the map needs no API key (Leaflet with OpenStreetMap), but Android is not built or tested on a phone yet. It needs an EAS project (`npx eas init`) or Android Studio to build it, and an Android app in Firebase with `google-services.json` and signing fingerprints for SMS sign-in. See [docs/android-build.md](docs/android-build.md).
+
+Hassan's Version 2 features: orders are saved in Firestore and follow the technician live on the driver's phone, each new order is offered to the **nearest online technician** (by road) and moves to the next one after 2 minutes, the van on Track Order follows the **technician's live location**, and finished orders have **Book again**. Drivers can **rate the technician** after a finished job (stars and an optional comment), and the rating shown is the average of those reviews. The technician's phone keeps sharing its location while the app is open on any screen. See [docs/version-2.md](docs/version-2.md#hassans-features-5-7-8-9-14-15).
+
+Verified so far (25 and 28 Nov 2026):
+
+- `firebase/firestore.rules` and `firebase/storage.rules` are published, and all 32 rules checks pass in the Firestore emulator.
+- The six `services` documents are in Firestore (`npm run seed:services -- --key ...`).
+- Three-phone test on 28 Nov (one driver, two registered technicians, iOS Release build): orders in Firestore, nearest-technician matching and moving the offer on, live location, ratings and car photo upload all worked (orders SND-1043-VQHV to SND-1046-VQHV). Details in [docs/version-2.md](docs/version-2.md#results-25-and-28-nov-2026).
+
+Not verified yet:
+
+- A price changed in the console showing in the app after relaunch (feature 9), and Book again (feature 15) on a phone.
+- Live location stops when the technician's phone is locked or SANAD is in the background (foreground only for now).
+- The 25 Nov fixes (**Find on Map** for typed locations, push and alert changes, the Android map) were not part of the three-phone test build.
+
+```bash
+npm run add:provider -- --phone 55550123 --name "Ahmed" --dry-run   # register a technician for Provider Mode (admin)
+npm run build:android                                                # Android development build with EAS
+```
 
 ## Demo script
 
@@ -54,7 +80,7 @@ Splash, Sign In, Register, Verify OTP, Add First Car, Home, six service screens 
 | Need in SANAD | Technology | Expo Go | Status in prototype | Production path |
 |---|---|---|---|---|
 | Find the driver | `expo-location` (GPS + reverse geocoding) | Yes | Real | Same; add background updates only if needed |
-| Show location and provider | `react-native-maps` | Yes | Real (Apple Maps on iOS, Google Maps on Android) | Google Maps API key for Android store builds |
+| Show location and provider | `react-native-maps` on iOS, Leaflet in `react-native-webview` on Android | Yes | Real on iOS (Apple Maps); OpenStreetMap on Android, not tried on a phone yet | Own or paid tile server on Android (the public OpenStreetMap tiles are for light use) |
 | Photo of the car | `expo-image-picker` (camera + library) | Yes | Real | Upload to cloud storage with the order |
 | Order and OTP alerts | `expo-notifications` (local) | Yes | Real local notifications | Remote push needs a development build, APNs/FCM and a push server |
 | Keep the user signed in | `expo-secure-store` | Yes | Real (Keychain / Keystore) | Store a server-issued session token |
@@ -63,10 +89,10 @@ Splash, Sign In, Register, Verify OTP, Add First Car, Home, six service screens 
 | Contact provider / SOS | `Linking` (`tel:`, WhatsApp link) | Yes | Real | Masked numbers through a calling provider |
 | Nearby providers and garages | Nominatim search API, with Overpass asked in parallel (OpenStreetMap JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts`; Nominatim answers on device, Overpass timed out from Qatar | Self-hosted service or Google Places |
 | Road distance, ETA, route | OSRM route API (JSON) | Yes | Real API, JSON parsed in `src/api/osm.ts` | Self-hosted OSRM or Google Routes |
-| Account data | Cloud Firestore `users/{uid}` with `cars` and `addresses` (`src/services/firestoreRepo.ts`) | Needs dev build | Real in the development build: live sync, offline cache, security rules; AsyncStorage in Expo Go | Orders move to Firestore in Sprint 5 |
+| Account data and orders | Cloud Firestore `users/{uid}` with `cars` and `addresses` (`src/services/firestoreRepo.ts`), `orders/{id}` (`src/services/ordersRepo.ts`) | Needs dev build | Real in the development build: live sync, offline cache, security rules; AsyncStorage in Expo Go | Same |
 | Service catalogue | Cloud Firestore `services` (`src/services/catalogRepo.ts`) | Needs dev build | Real: prices editable in the console, built-in fallback | Same |
 | Navigation | React Navigation (native stack + bottom tabs) | Yes | Real | Same |
-| Provider matching and live tracking | Overpass + OSRM | n/a | Real nearest business and road route; movement sped up | `orders/{id}/tracking/live` written by the provider app |
+| Provider matching and live tracking | Firestore `providers` + OSRM (`src/services/matching.ts`), `orders/{id}/tracking/live` (`src/services/trackingRepo.ts`) | Needs dev build | Real in the development build: nearest online technician by road, live location every few seconds; simulated in Expo Go | Same, plus a server to re-offer jobs when the driver's app is closed |
 
 ## Project structure (MVVM, like the course labs)
 
@@ -81,9 +107,15 @@ src/api/osm.ts               external APIs (Overpass, OSRM) and JSON parsing
 src/models/firestore.ts      Firebase structure and converters
 src/services/firestoreRepo.ts  users, cars and addresses in Firestore (load, save, live updates)
 src/services/catalogRepo.ts  service catalogue from Firestore with built-in fallback
+src/services/providerRepo.ts  Provider Mode: open jobs, accept, status updates in Firestore
+src/services/photoUpload.ts  car photo upload to Cloud Storage
+src/services/push.ts         push token and push messages for order status
+src/views/provider/          Provider Mode screens (jobs list, job)
 scripts/seed-services.ts     seeds the services collection (admin)
+scripts/add-provider.ts      registers a technician in the providers collection (admin)
 src/feasibility/tests.ts     the in-app technology tests
-firebase/firestore.rules     security rules (publish in the Firebase console)
+firebase/firestore.rules     Firestore security rules (publish in the Firebase console)
+firebase/storage.rules       Cloud Storage rules for car photos
 docs/                        Firebase setup, Firestore data, data mapping, feasibility results, user test plan, feature schedule
 __tests__/                   Jest unit tests
 ```
@@ -91,7 +123,8 @@ __tests__/                   Jest unit tests
 ## Known limitations
 
 - Expo Go has no Firebase: there the OTP is generated locally and data stays on the phone. In the development build, sign-in, profile, cars, addresses and the service catalogue use Firebase.
-- Orders are still saved on the phone until Sprint 5; the technician and their speed are simulated (their starting business and road route are real).
+- In Expo Go, orders stay on the phone: a technician accepts them in Provider Mode on the same phone, or the technician is simulated, and the van's movement is simulated (Demo Mode). In the development build, orders go to the nearest online technician when there is one; with nobody online the simulated technician takes the job.
+- Moving a job to the next technician after 2 minutes runs on the driver's phone, so it only happens while SANAD is open there.
 - The public Overpass and OSRM servers are for light use; the app falls back to estimates when they are unreachable.
 - Card payment and promo codes are placeholders.
 - The browser preview cannot show maps, secure storage, haptics or reverse geocoding; use a phone or simulator.

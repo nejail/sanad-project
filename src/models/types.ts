@@ -81,7 +81,17 @@ export interface Quote {
   isEstimate: boolean;
 }
 
-export type OrderStatus = 'confirmed' | 'on_the_way' | 'arrived' | 'done' | 'cancelled';
+/**
+ * 'confirmed' means the request was sent and is waiting for a technician (shown as "Requested");
+ * 'accepted' means a technician took the job (V2 feature 6).
+ */
+export type OrderStatus = 'confirmed' | 'accepted' | 'on_the_way' | 'arrived' | 'done' | 'cancelled';
+
+/** One status change, with when it happened (ISO date). */
+export interface StatusChange {
+  status: OrderStatus;
+  at: string;
+}
 
 /** A real place (from the Overpass API) stored on orders: the provider's base or a tow destination. */
 export interface PlaceRef {
@@ -98,6 +108,9 @@ export interface Provider {
   phone: string;
   base?: PlaceRef; // business the technician is dispatched from
   etaMin?: number; // driving time from OSRM when the order was placed
+  id?: string; // providers/{id} when a real provider accepted the job
+  verified?: boolean; // profile checked by SANAD (registered in the providers collection)
+  vehiclePlate?: string;
 }
 
 export interface Order {
@@ -118,6 +131,21 @@ export interface Order {
   status: OrderStatus;
   createdAt: string;
   provider: Provider;
+  /**
+   * Who moves the order along: 'simulated' (the prototype technician, the default for older orders)
+   * or 'provider' (a technician accepts it in Provider Mode and updates the status).
+   */
+  dispatch?: 'simulated' | 'provider';
+  statusHistory?: StatusChange[];
+  acceptedAt?: string;
+  photoPath?: string; // Cloud Storage path once the car photo is uploaded
+  photoUrl?: string; // download URL the technician opens
+  customerName?: string;
+  customerPhone?: string; // 8-digit Qatar number, so the technician can call the driver
+  customerPushToken?: string; // Expo push token, so status changes reach the driver with the app closed
+  offeredTo?: string; // providers/{uid} the job is offered to right now (V2 feature 8)
+  offeredAt?: string; // when it was offered to them, so it can move on after 2 minutes
+  offeredBefore?: string[]; // technicians it was already offered to
 }
 
 export interface BookingDraft {

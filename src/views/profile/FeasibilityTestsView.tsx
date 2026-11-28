@@ -48,7 +48,7 @@ export default function FeasibilityTestsView() {
   };
 
   const all: { id: string; name: string; technology: string }[] = [
-    { id: 'map', name: 'Map rendering', technology: 'react-native-maps' },
+    { id: 'map', name: 'Map rendering', technology: Platform.OS === 'android' ? 'Leaflet (WebView)' : 'react-native-maps' },
     ...TESTS,
   ];
   const passed = all.filter((t) => results[t.id]?.status === 'pass').length;

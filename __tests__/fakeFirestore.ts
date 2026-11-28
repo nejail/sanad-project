@@ -2,7 +2,7 @@
  * In-memory stand-in for Cloud Firestore used by the repository tests (no network).
  * Supports reads, batched writes and live listeners on documents and collections.
  */
-import { FirestoreApi, StoredDoc, WriteOp } from '../src/services/firestoreRepo';
+import { FirestoreApi, QueryFilter, StoredDoc, WriteOp } from '../src/services/firestoreRepo';
 
 /** Marker types so tests can check that GeoPoint and Timestamp were used. */
 export class FakeGeoPoint {
@@ -16,7 +16,7 @@ export class FakeTimestamp {
 }
 
 type DocListener = { path: string; next: (d: Record<string, unknown> | null) => void };
-type ColListener = { path: string; next: (docs: StoredDoc[]) => void };
+type ColListener = { path: string; filters?: QueryFilter[]; next: (docs: StoredDoc[]) => void };
 
 export class FakeFirestore implements FirestoreApi {
   docs = new Map<string, Record<string, unknown>>();
@@ -57,9 +57,13 @@ export class FakeFirestore implements FirestoreApi {
       this.failNext = null;
       throw this.error(code);
     }
+    // Like Firestore, an update of a missing document fails the whole batch.
+    const missing = ops.find((op) => op.kind === 'update' && !this.docs.has(op.path));
+    if (missing) throw this.error('not-found');
     this.commits.push(ops);
     for (const op of ops) {
       if (op.kind === 'set') this.docs.set(op.path, op.data);
+      else if (op.kind === 'update') this.docs.set(op.path, { ...this.docs.get(op.path), ...op.data });
       else this.docs.delete(op.path);
     }
     this.notify();
@@ -74,7 +78,7 @@ export class FakeFirestore implements FirestoreApi {
 
   private notify() {
     this.docListeners.forEach((l) => l.next(this.docs.get(l.path) ?? null));
-    this.colListeners.forEach((l) => l.next(this.list(l.path)));
+    this.colListeners.forEach((l) => l.next(this.matching(l.path, l.filters)));
   }
 
   onDoc(path: string, next: (d: Record<string, unknown> | null) => void) {
@@ -90,6 +94,20 @@ export class FakeFirestore implements FirestoreApi {
     const l = { path, next };
     this.colListeners.push(l);
     next(this.list(path));
+    return () => {
+      this.colListeners = this.colListeners.filter((x) => x !== l);
+    };
+  }
+
+  /** Documents in a collection that match every equality filter (null matches null). */
+  matching(collectionPath: string, filters: QueryFilter[] = []): StoredDoc[] {
+    return this.list(collectionPath).filter((d) => filters.every(([field, , value]) => (d.data[field] ?? null) === value));
+  }
+
+  onQuery(path: string, filters: QueryFilter[], next: (docs: StoredDoc[]) => void) {
+    const l = { path, filters, next };
+    this.colListeners.push(l);
+    next(this.matching(path, filters));
     return () => {
       this.colListeners = this.colListeners.filter((x) => x !== l);
     };

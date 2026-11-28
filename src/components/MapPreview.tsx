@@ -14,7 +14,7 @@ export interface MapPreviewProps {
   onReady?: () => void;
 }
 
-/** Native map (Apple Maps on iOS, Google Maps on Android) via react-native-maps. */
+/** Native map (Apple Maps) via react-native-maps. Android uses MapPreview.android.tsx, which needs no Google key. */
 export function MapPreview({ center, provider, route, height = 220, interactive = true, onPick, onReady }: MapPreviewProps) {
   const ref = useRef<MapView>(null);
 
