@@ -46,7 +46,7 @@ Verified so far (25 and 28 Nov 2026):
 
 Not verified yet:
 
-- A price changed in the console showing in the app after relaunch (feature 9), and Book again (feature 15) on a phone.
+- A price changed in the console showing in the app after relaunch (feature 9).
 - Live location stops when the technician's phone is locked or SANAD is in the background (foreground only for now).
 
 ```bash
