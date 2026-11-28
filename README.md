@@ -26,8 +26,6 @@ npm run typecheck   # TypeScript strict mode
 npx expo start --web  # browser preview (maps, secure store, haptics, Firebase are stubbed)
 ```
 
-Sprint 4 task prompts for teammates: [docs/prompts](docs/prompts).
-
 ## Version 2 (after Sprint 5 user testing)
 
 Nasser's Version 2 features: the tow price shows the distance from the first price screen, a large **Enter Location Manually** button appears when GPS fails, the SMS wait is explained, new drivers can **Skip for now** on Add Car, Track Order shows a clear **Accepted** step with the technician's details and a **Demo Mode** badge, and **Provider Mode** (Profile) lets a technician accept a job and update its status. The driver gets in-app notifications when the technician accepts, sets off and arrives, and the car photo is uploaded to Cloud Storage.
