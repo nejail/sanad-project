@@ -1,4 +1,4 @@
-# Version 2: Nasser's Features (after Sprint 5 user testing)
+# Version 2 (after Sprint 5 user testing)
 
 These are the Version 2 features owned by Nasser in the Sprint 5 report (section 6), in priority order. Each one names the screen it changes and how to check it. Unit tests for all of them are in `__tests__/version2.test.ts` and `__tests__/providerJobs.test.ts`.
 

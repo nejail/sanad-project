@@ -4,6 +4,8 @@ Every screen from the high-fidelity wireframes, the data it reads or writes, the
 
 Structs live in `src/models/types.ts` (app) and `src/models/firestore.ts` (Firebase documents). External API parsing lives in `src/api/osm.ts`.
 
+> **Status as of Sprint 3 (20 Oct 2026).** The "Status" and "Prototype source" columns below describe the app before Firebase. Since then the "production" sources have been built: Firebase Authentication (Sprint 4), Firestore for accounts, the catalogue, orders, providers, live tracking and reviews, and Cloud Storage for car photos (Version 2). The Rate Provider screen is built (feature 14). For the current status see the [README](../README.md) and [version-2.md](version-2.md).
+
 ## Data sources
 
 | Source | Type | What it provides | Status |
