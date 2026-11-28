@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
-import { ConfigPlugin, withEntitlementsPlist } from 'expo/config-plugins';
+import { ConfigPlugin, withEntitlementsPlist, withPlugins } from 'expo/config-plugins';
 
 /**
  * Removes the Push Notifications entitlement that expo-notifications adds.
@@ -14,6 +14,17 @@ const withoutPushEntitlement: ConfigPlugin = (config) =>
     if (process.env.SANAD_PUSH !== '1') delete mod.modResults['aps-environment'];
     return mod;
   });
+
+/**
+ * The iOS part of React Native Firebase's config plugin (@react-native-firebase/app 27.1.0), for builds
+ * without google-services.json: the plugin's Android steps would stop the Android build.
+ */
+const withFirebaseIosOnly = (projectRoot: string): ConfigPlugin => (config) => {
+  // The package does not export this file, so it is loaded by its path.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const ios = require(path.join(projectRoot, 'node_modules/@react-native-firebase/app/plugin/build/ios'));
+  return withPlugins(config, [ios.withFirebaseAppDelegate, ios.withIosGoogleServicesFile, [ios.withIosDisableSPM, undefined]]);
+};
 
 /**
  * Adds Firebase to the native build only when the Firebase config files are present.
@@ -29,17 +40,30 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig => {
 
   if (hasIos || hasAndroid) {
     plugins.push(
-      '@react-native-firebase/app',
+      // Without google-services.json only the plugin's iOS steps run (below), so Android builds in prototype mode.
+      ...(hasAndroid ? ['@react-native-firebase/app'] : []),
       '@react-native-firebase/auth',
-      // React Native Firebase uses Swift Package Manager on iOS, which needs dynamic frameworks.
-      ['expo-build-properties', { ios: { useFrameworks: 'dynamic' } }],
     );
   }
+  plugins.push([
+    'expo-build-properties',
+    {
+      // React Native Firebase uses Swift Package Manager on iOS, which needs dynamic frameworks.
+      ios: hasIos || hasAndroid ? { useFrameworks: 'dynamic' } : {},
+      android: {
+        // Firebase's Android libraries (BoM 35) are built with Kotlin 2.4; React Native 0.88 defaults to 2.2.
+        kotlinVersion: '2.4.0',
+        // Release builds shrink code with R8, which removed WorkManager's database class and crashed the app at start.
+        extraProguardRules: '-keep class * extends androidx.room.RoomDatabase { <init>(); }',
+      },
+    },
+  ]);
 
-  return withoutPushEntitlement({
+  const full: ExpoConfig = {
     ...(config as ExpoConfig),
     ios: { ...config.ios, ...(hasIos ? { googleServicesFile: './GoogleService-Info.plist' } : {}) },
     android: { ...config.android, ...(hasAndroid ? { googleServicesFile: './google-services.json' } : {}) },
     plugins,
-  });
+  };
+  return withoutPushEntitlement(hasIos && !hasAndroid ? withFirebaseIosOnly(projectRoot)(full) : full);
 };

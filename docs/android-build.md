@@ -1,6 +1,8 @@
 # Android Build (Version 2, feature 16)
 
-Many drivers in Qatar use Android. The app code is shared with iOS, but **the Android build has not been made or tested on a phone yet**. It needs an EAS project (`npx eas init`) or Android Studio, and the Firebase setup below for SMS sign-in. No Google Maps API key is needed: on Android the map is Leaflet with OpenStreetMap tiles in a WebView (`src/components/MapPreview.android.tsx`). The steps below cover Firebase and building the APK.
+Many drivers in Qatar use Android. The app code is shared with iOS. No Google Maps API key is needed: on Android the map is Leaflet with OpenStreetMap tiles in a WebView (`src/components/MapPreview.android.tsx`).
+
+**Status (28 Nov 2026):** a release APK (version 0.5.0) was built on a Mac with the command-line steps in 2c and tested on an Android 16 emulator (Pixel 7 profile). Sign-in, normal booking with GPS, GPS off with Find on Map, Book again and Track Order with the Leaflet map all worked, with no crashes. That build had no `google-services.json`, so it ran in prototype mode (code shown on the phone, data kept on the phone). Not done yet: Firebase on Android (step 1) and a test on a physical Android phone.
 
 ## 1. Add the Android app to Firebase (once)
 
@@ -32,9 +34,30 @@ Requirements: Android Studio with an SDK and a JDK 17, and a phone with USB debu
 
 ```bash
 npm install
-npm run prebuild:android     # generates the android/ folder with Firebase (needs google-services.json)
+npm run prebuild:android     # generates the android/ folder (with Firebase when google-services.json is present)
 npm run android:device       # pick the phone; builds and installs the development build
 ```
+
+## 2c. Build a standalone APK from the command line (no Android Studio)
+
+This is how the 28 Nov build was made on a Mac. It needs Homebrew.
+
+```bash
+brew install openjdk@17
+brew install --cask android-commandlinetools
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+yes | sdkmanager --licenses
+sdkmanager "platform-tools" "platforms;android-37.0" "build-tools;37.0.0" "ndk;27.1.12297006" "cmake;3.22.1"
+npm install
+npx expo prebuild --platform android --clean
+echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+cd android && ./gradlew assembleRelease
+```
+
+The APK is `android/app/build/outputs/apk/release/app-release.apk`. Install it with `adb install` or by copying it to the phone. Two settings in `app.config.ts` make this build work: Kotlin 2.4.0 (Firebase's Android libraries need it) and an R8 rule that keeps WorkManager's database class (without it the release build crashed at start).
+
+To try it on an emulator, also install `"emulator"` and `"system-images;android-36;google_apis;arm64-v8a"`, create one with `avdmanager create avd -n sanad -k "system-images;android-36;google_apis;arm64-v8a" -d pixel_7`, and start it with `$ANDROID_HOME/emulator/emulator -avd sanad`.
 
 ## 3. Check it works
 

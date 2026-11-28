@@ -164,7 +164,7 @@ export default function VerifyOtpView({ navigation, route }: ScreenProps<'Verify
       ) : null}
       {fallbackCode && !showCode ? <LinkText label="Show prototype code" onPress={() => setShowCode(true)} /> : null}
       <Text style={styles.mode} testID="auth-mode">
-        {auth.mode === 'firebase' ? 'Secured by Firebase Authentication' : 'Prototype mode: code shown on this phone (Expo Go)'}
+        {auth.mode === 'firebase' ? 'Secured by Firebase Authentication' : 'Prototype mode: code shown on this phone'}
       </Text>
     </AuthLayout>
   );
