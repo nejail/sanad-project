@@ -33,7 +33,7 @@ Nasser's Version 2 features: the tow price shows the distance from the first pri
 Not working yet:
 
 - **Push notifications with the app closed** are coded but not set up: they need an EAS project id (`npx eas init`) and, on iOS, a paid Apple Developer account. Without them no push is sent.
-- **Android:** a release APK (no API key needed: the map is Leaflet with OpenStreetMap) was built and tested on an Android emulator on 28 Nov, and the three booking flows worked, in prototype mode. Not done yet: a test on a physical Android phone, and Firebase on Android (an Android app in Firebase with `google-services.json` and signing fingerprints for SMS sign-in). Build steps: [docs/android-build.md](docs/android-build.md).
+- **Android:** a release APK (no Google Maps key needed: the map is Leaflet with OpenStreetMap) with Firebase was built and tested on an Android emulator on 28 Nov: Firebase sign-in and the three booking flows worked, with orders saved to Firestore. Not done yet: a test on a physical Android phone. Build and Firebase steps: [docs/android-build.md](docs/android-build.md).
 
 Hassan's Version 2 features: orders are saved in Firestore and follow the technician live on the driver's phone, each new order is offered to the **nearest online technician** (by road) and moves to the next one after 2 minutes, the van on Track Order follows the **technician's live location**, and finished orders have **Book again**. Drivers can **rate the technician** after a finished job (stars and an optional comment), and the rating shown is the average of those reviews. The technician's phone keeps sharing its location while the app is open on any screen. See [docs/version-2.md](docs/version-2.md#hassans-features-5-7-8-9-14-15).
 

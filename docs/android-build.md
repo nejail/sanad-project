@@ -2,7 +2,7 @@
 
 Many drivers in Qatar use Android. The app code is shared with iOS. No Google Maps API key is needed: on Android the map is Leaflet with OpenStreetMap tiles in a WebView (`src/components/MapPreview.android.tsx`).
 
-**Status (28 Nov 2026):** a release APK (version 0.5.0) was built on a Mac with the command-line steps in 2c and tested on an Android 16 emulator (Pixel 7 profile). Sign-in, normal booking with GPS, GPS off with Find on Map, Book again and Track Order with the Leaflet map all worked, with no crashes. That build had no `google-services.json`, so it ran in prototype mode (code shown on the phone, data kept on the phone). Not done yet: Firebase on Android (step 1) and a test on a physical Android phone.
+**Status (28 Nov 2026):** Firebase is set up for Android (step 1, including the Play Integrity API). A release APK (version 0.5.0) built with the command-line steps in 2c was tested on an Android 16 emulator (Pixel 7 profile): Firebase sign-in with the test number, then normal booking with GPS, GPS off with Find on Map, and Book again, with orders saved to Firestore (SND-1043-JINW to SND-1045-JINW) and no crashes. On the emulator Play Integrity fails, so Firebase falls back to a reCAPTCHA check in Chrome, which passed. Not done yet: a test on a physical Android phone.
 
 ## 1. Add the Android app to Firebase (once)
 
@@ -13,6 +13,10 @@ Many drivers in Qatar use Android. The app code is shared with iOS. No Google Ma
    - **Local build:** `cd android && ./gradlew signingReport` after step 2 below, and copy the SHA-1 and SHA-256 of the `debug` variant.
 
    Without the fingerprints, the SMS code is refused with `auth/app-not-authorized` (or a reCAPTCHA page opens instead).
+4. In Google Cloud console (project `sanad-9d5f6`) > APIs & Services > Library, enable the **Play Integrity API**. Without it and the fingerprints, sending a code fails with `auth/missing-client-identifier`.
+5. Phone numbers for testing (Authentication > Sign-in method > Phone) must include `+974 5012 3456` with code `123456`; otherwise a real SMS goes to that number.
+
+The fingerprints registered on 28 Nov are those of `android/app/debug.keystore`, which signs local builds (SHA-1 `5E:8F:16:06:2E:A3:CD:2C:4A:0D:54:78:76:BA:A6:F3:8C:AB:F6:25`). An EAS build is signed with a different key, whose fingerprints must be added too.
 
 `app.config.ts` adds Firebase to the Android build only when `google-services.json` is present. Without it the Android build still runs, in the same prototype mode as Expo Go (code shown on the phone, data kept on the phone).
 
@@ -55,7 +59,7 @@ echo "sdk.dir=$ANDROID_HOME" > android/local.properties
 cd android && ./gradlew assembleRelease
 ```
 
-The APK is `android/app/build/outputs/apk/release/app-release.apk`. Install it with `adb install` or by copying it to the phone. Two settings in `app.config.ts` make this build work: Kotlin 2.4.0 (Firebase's Android libraries need it) and an R8 rule that keeps WorkManager's database class (without it the release build crashed at start).
+The APK is `android/app/build/outputs/apk/release/app-release.apk`. Install it with `adb install` or by copying it to the phone. Three settings in `app.config.ts` make this build work: Kotlin 2.4.0 (Firebase's Android libraries need it), an R8 rule that keeps WorkManager's database class (without it the release build crashed at start), and more Gradle memory (`-Xmx6g -XX:MaxMetaspaceSize=2g`; with Firebase, R8 ran out of Metaspace under the default).
 
 To try it on an emulator, also install `"emulator"` and `"system-images;android-36;google_apis;arm64-v8a"`, create one with `avdmanager create avd -n sanad -k "system-images;android-36;google_apis;arm64-v8a" -d pixel_7`, and start it with `$ANDROID_HOME/emulator/emulator -avd sanad`.
 

@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
-import { ConfigPlugin, withEntitlementsPlist, withPlugins } from 'expo/config-plugins';
+import { ConfigPlugin, withEntitlementsPlist, withGradleProperties, withPlugins } from 'expo/config-plugins';
 
 /**
  * Removes the Push Notifications entitlement that expo-notifications adds.
@@ -12,6 +12,19 @@ import { ConfigPlugin, withEntitlementsPlist, withPlugins } from 'expo/config-pl
 const withoutPushEntitlement: ConfigPlugin = (config) =>
   withEntitlementsPlist(config, (mod) => {
     if (process.env.SANAD_PUSH !== '1') delete mod.modResults['aps-environment'];
+    return mod;
+  });
+
+/**
+ * More memory for the Android build. With Firebase, R8 (release code shrinking) ran out of
+ * Metaspace under Expo's default (-Xmx2048m -XX:MaxMetaspaceSize=512m).
+ */
+const withAndroidBuildMemory: ConfigPlugin = (config) =>
+  withGradleProperties(config, (mod) => {
+    const value = '-Xmx6g -XX:MaxMetaspaceSize=2g';
+    const item = mod.modResults.find((p) => p.type === 'property' && p.key === 'org.gradle.jvmargs');
+    if (item && item.type === 'property') item.value = value;
+    else mod.modResults.push({ type: 'property', key: 'org.gradle.jvmargs', value });
     return mod;
   });
 
@@ -65,5 +78,5 @@ export default ({ config, projectRoot }: ConfigContext): ExpoConfig => {
     android: { ...config.android, ...(hasAndroid ? { googleServicesFile: './google-services.json' } : {}) },
     plugins,
   };
-  return withoutPushEntitlement(hasIos && !hasAndroid ? withFirebaseIosOnly(projectRoot)(full) : full);
+  return withAndroidBuildMemory(withoutPushEntitlement(hasIos && !hasAndroid ? withFirebaseIosOnly(projectRoot)(full) : full));
 };
