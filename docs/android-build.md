@@ -1,6 +1,6 @@
 # Android Build (Version 2, feature 16)
 
-Many drivers in Qatar use Android, so SANAD now has an Android development build next to the iOS one. The app code is shared; the steps below add the Firebase file Android needs and build the APK.
+Many drivers in Qatar use Android. The app code is shared with iOS, but **the Android build has not been made or tested on a phone yet**. It needs an EAS project (`npx eas init`) or Android Studio, and the Firebase setup below for SMS sign-in. No Google Maps API key is needed: on Android the map is Leaflet with OpenStreetMap tiles in a WebView (`src/components/MapPreview.android.tsx`). The steps below cover Firebase and building the APK.
 
 ## 1. Add the Android app to Firebase (once)
 
@@ -48,6 +48,7 @@ npm run android:device       # pick the phone; builds and installs the developme
 
 ## Android notes
 
+- **Map:** Leaflet 1.9.4 is stored in the app (`src/components/leafletAssets.ts`), so tapping the map works without a network, but the map pictures need one. They come from the public OpenStreetMap servers, which are for light use, and show place names in Arabic in most of Qatar.
 - Notifications use the `SANAD updates` channel (high importance), created at start-up in `src/services/notifications.ts`. Android 13 and later ask for notification permission on Home.
 - Remote push on Android needs Firebase Cloud Messaging credentials uploaded to EAS (`npx eas credentials -p android` > Push Notifications). No paid account is needed, unlike iOS.
 - The iOS-only `LSApplicationQueriesSchemes` in `app.json` has no Android equivalent to set: Call and WhatsApp open with `Linking.openURL`, which works without extra permissions.

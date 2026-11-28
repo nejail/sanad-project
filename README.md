@@ -35,7 +35,7 @@ Nasser's Version 2 features: the tow price shows the distance from the first pri
 Not working yet:
 
 - **Push notifications with the app closed** are coded but not set up: they need an EAS project id (`npx eas init`) and, on iOS, a paid Apple Developer account. Without them no push is sent.
-- **Android:** the EAS build setup is in place (`npm run build:android`), but it has not been verified on an Android phone yet.
+- **Android:** the app code is shared with iOS and the map needs no API key (Leaflet with OpenStreetMap), but Android is not built or tested on a phone yet. It needs an EAS project (`npx eas init`) or Android Studio to build it, and an Android app in Firebase with `google-services.json` and signing fingerprints for SMS sign-in. See [docs/android-build.md](docs/android-build.md).
 
 Hassan's Version 2 features: orders are saved in Firestore and follow the technician live on the driver's phone, each new order is offered to the **nearest online technician** (by road) and moves to the next one after 2 minutes, the van on Track Order follows the **technician's live location**, and finished orders have **Book again**. Drivers can **rate the technician** after a finished job (stars and an optional comment), and the rating shown is the average of those reviews. The technician's phone keeps sharing its location while the app is open on any screen. See [docs/version-2.md](docs/version-2.md#hassans-features-5-7-8-9-14-15).
 
@@ -49,6 +49,7 @@ Not verified yet:
 
 - A price changed in the console showing in the app after relaunch (feature 9), and Book again (feature 15) on a phone.
 - Live location stops when the technician's phone is locked or SANAD is in the background (foreground only for now).
+- The 25 Nov fixes (**Find on Map** for typed locations, push and alert changes, the Android map) were not part of the three-phone test build.
 
 ```bash
 npm run add:provider -- --phone 55550123 --name "Ahmed" --dry-run   # register a technician for Provider Mode (admin)
@@ -81,7 +82,7 @@ Splash, Sign In, Register, Verify OTP, Add First Car, Home, six service screens 
 | Need in SANAD | Technology | Expo Go | Status in prototype | Production path |
 |---|---|---|---|---|
 | Find the driver | `expo-location` (GPS + reverse geocoding) | Yes | Real | Same; add background updates only if needed |
-| Show location and provider | `react-native-maps` | Yes | Real (Apple Maps on iOS, Google Maps on Android) | Google Maps API key for Android store builds |
+| Show location and provider | `react-native-maps` on iOS, Leaflet in `react-native-webview` on Android | Yes | Real on iOS (Apple Maps); OpenStreetMap on Android, not tried on a phone yet | Own or paid tile server on Android (the public OpenStreetMap tiles are for light use) |
 | Photo of the car | `expo-image-picker` (camera + library) | Yes | Real | Upload to cloud storage with the order |
 | Order and OTP alerts | `expo-notifications` (local) | Yes | Real local notifications | Remote push needs a development build, APNs/FCM and a push server |
 | Keep the user signed in | `expo-secure-store` | Yes | Real (Keychain / Keystore) | Store a server-issued session token |
