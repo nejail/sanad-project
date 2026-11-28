@@ -170,6 +170,8 @@ describe('real car position (V2 feature 2)', () => {
     expect(pinnedCoords(address)).toEqual(address.coords);
     expect(pinnedCoords({ ...address, id: 'described' })).toBeUndefined();
     expect(pinnedCoords(undefined)).toBeUndefined();
+    // Addresses typed on Add Address before the lookup were saved at the centre of Doha.
+    expect(pinnedCoords({ ...address, id: 'addr-1', label: 'Home', coords: { latitude: 25.2854, longitude: 51.531 } })).toBeUndefined();
   });
 });
 

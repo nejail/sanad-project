@@ -51,7 +51,8 @@ export default function OrdersView() {
               <Pressable
                 onPress={() => {
                   bookAgain(o);
-                  nav.navigate('Service', { serviceId: o.serviceId });
+                  // Location first, so the driver confirms where the car is now (it may not be where it was last time).
+                  nav.navigate('Location');
                 }}
                 style={styles.again}
                 accessibilityLabel={`Book ${o.title} again`}

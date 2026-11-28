@@ -79,7 +79,7 @@ For live tracking (feature 7), set `LIVE_TRACKING_READY = true` in `src/models/t
 | 8 | Nearest available provider matching | A | `matching.ts`, `providerRepo.listenOpenJobs`, `ProviderJobsView` (online switch), rules | Two registered technicians online. The order's `offeredTo` is the nearer one (by road), and only they see it under New requests. Turn them off with **Available for new jobs** (or wait 2 minutes): `offeredTo` changes to the other one and `offeredBefore` lists the first. |
 | 7 | Live tracking from the technician's real location | A | `trackingRepo.ts`, `useShareLocation` (technician), `useLiveTracking` + `TrackOrderView` (driver), `LIVE_TRACKING_READY = true` | Technician taps **Start Driving to Customer**: the job shows "Sharing your live location" and `orders/{id}/tracking/live` updates every few seconds. The driver's van moves to that position within a few seconds and shows "Live location · x km away" with the live ETA. Writing a test `location` GeoPoint in the console moves the van too. No Demo Mode badge for real-technician orders. |
 | 14 | Rate the technician | B | `models/reviews.ts`, `reviewsRepo.ts`, `useReviews.ts`, `RateTechnicianCard`, `TrackOrderView`, `OrdersView`, `ProviderJobsView`, rules | After a job sent to a technician is done, Track Order and Orders show **Rate your technician** (1 to 5 stars, optional comment up to 300 characters). Sending it writes `reviews/{orderId}` once; the card then shows the stars given. The technician's rating on Track Order and in Provider Mode is the average of their reviews, or the profile's `rating` when there are none. |
-| 15 | Book again | B | `rebookDraft` in `models/orders.ts`, `OrdersView` | Orders > Completed > **Book again** opens the service screen with the same option, car and address (for now, ASAP). |
+| 15 | Book again | B | `rebookDraft` in `models/orders.ts`, `OrdersView` | Orders > Completed > **Book again** opens Location with the last address selected, so the driver confirms or changes it, then the service screen with the same option and car (for now, ASAP). |
 
 Feature 14 keeps ratings in their own collection instead of changing the technician's profile, so the rules can check each review against its order: `reviews/{orderId}` holds `orderId`, `providerId`, `customerId`, `stars` (1 to 5), `comment` (or null) and `createdAt`. Only the driver of that order can create it, only when the order is done and `providerId` matches the technician who did it, and nobody can update or delete it, so an order is rated once. Simulated orders and Provider Mode on one phone (`device:` technicians) show no rating card.
 
@@ -169,3 +169,17 @@ All 32 checks above were run against `firebase/firestore.rules` in the Firestore
 | 15 | Book again | Not verified on a phone | Unit tests only. |
 
 **Three-phone test (28 Nov 2026):** Hassan was the driver, Nasser was Test Technician 1 (plate 1111) and Mohammed was Test Technician 2 (plate 2222), all on the iOS Release build installed from Xcode. Order ids: SND-1043-VQHV, SND-1044-VQHV, SND-1045-VQHV, SND-1046-VQHV.
+
+## Known limits from the final code review (28 Nov 2026)
+
+Fixed before merging: saved addresses typed before the map lookup no longer count as a real position, **Book again** opens Location first, and a refused re-offer (the technician accepted at the same moment) no longer shows an error. These are not fixed yet:
+
+| Area | Limit | Way forward |
+|---|---|---|
+| Privacy | A technician an order is offered to can read the driver's name, phone and push token in Firestore before accepting. The app only hides them on screen. | Move these fields to `orders/{id}/private/contact`, readable by the driver and the assigned technician only. |
+| Orders | The order number comes from the orders on the phone. Right after a fresh install, before the phone has received the driver's orders, a new order could reuse an existing number and replace that order. | Make `createdAt` unchangeable in the rules, or check the id before creating. |
+| Orders | For orders sent to technicians, the order is written to Firestore only after the road ranking (up to 4 seconds). If SANAD is closed in that time, no technician sees it. | Create the order first, then add `offeredTo`. |
+| Push | The push token is saved on orders placed after it arrives. An order placed in the first seconds after sign-in, or before notifications are allowed, gets no closed-app push. | Add the token to open orders when it arrives. |
+| Matching | Moving an offer on runs on the driver's phone every 15 seconds, only while SANAD is open there, and a technician who closes the app stays online. | A Cloud Function or scheduled job on `orders`, and clearing `isOnline` on disconnect. |
+| Performance | Every driver's phone listens to all online technicians, whose location changes every 4 seconds during a job, so the app redraws that often. | Keep only the technician ids in the app state. |
+| Rules script | `npm run check:rules` sends dates as text, so check 26 (`createdAt is timestamp`) would fail on the Rules API. The 32 checks were run in the emulator instead. | Send a timestamp for `createdAt`, or keep using the emulator. |

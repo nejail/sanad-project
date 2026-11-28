@@ -341,7 +341,8 @@ function useAppModel() {
             const offer = nextOffer(o, ranked);
             if (!offer || uidRef.current !== authUid) return;
             patchOrder(o.id, { offeredTo: offer.offeredTo ?? undefined, offeredAt: offer.offeredAt ?? undefined, offeredBefore: offer.offeredBefore });
-            updateRemoteOrder(o.id, offer);
+            // Refused when the technician accepted in the meantime; the live listener then brings the accepted order.
+            remoteOrders.current.get(o.id)?.then(() => ordersRepo.update(o.id, offer)).catch(() => undefined);
           })
           .catch(() => undefined)
           .finally(() => offering.current.delete(o.id));
