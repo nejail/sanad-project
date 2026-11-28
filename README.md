@@ -1,10 +1,10 @@
-# SANAD (Sprint 4: first version)
+# SANAD (Sprint 5: Version 2)
 
 React Native app for **SANAD**, an on-demand car services app for drivers in Qatar, built for 67-443 Mobile Applications (CMU-Q).
 
 Team Sanad: Nasser Al-Ejail (nejail), Hassan Al-Qassabi (haq), Mohammed Al-Marri (mrmarri)
 
-The screens follow the revised high-fidelity Figma file. Sprint 4 adds real SMS sign-in with Firebase Authentication, which runs in a development build.
+The screens follow the revised high-fidelity Figma file. Sprint 4 added real SMS sign-in with Firebase Authentication, which runs in a development build. Sprint 5 adds Version 2 (app version 0.5.0), the changes from the Sprint 5 user tests, described below.
 
 ## Run it
 
@@ -42,12 +42,12 @@ Verified so far (25 and 28 Nov 2026):
 - `firebase/firestore.rules` and `firebase/storage.rules` are published, and all 32 rules checks pass in the Firestore emulator.
 - The six `services` documents are in Firestore (`npm run seed:services -- --key ...`).
 - Three-phone test on 28 Nov (one driver, two registered technicians, iOS Release build): orders in Firestore, nearest-technician matching and moving the offer on, live location, ratings and car photo upload all worked (orders SND-1043-VQHV to SND-1046-VQHV). Details in [docs/version-2.md](docs/version-2.md#results-25-and-28-nov-2026).
+- The three booking flows after the final fixes, tapped through on a phone on 28 Nov: normal booking with GPS, GPS off with **Find on Map**, and **Book again** (which now opens Location first). They are also tested end to end in `__tests__/appFlows.test.tsx`.
 
 Not verified yet:
 
 - A price changed in the console showing in the app after relaunch (feature 9), and Book again (feature 15) on a phone.
 - Live location stops when the technician's phone is locked or SANAD is in the background (foreground only for now).
-- The 25 Nov fixes (**Find on Map** for typed locations, push and alert changes, the Android map) were not part of the three-phone test build.
 
 ```bash
 npm run add:provider -- --phone 55550123 --name "Ahmed" --dry-run   # register a technician for Provider Mode (admin)

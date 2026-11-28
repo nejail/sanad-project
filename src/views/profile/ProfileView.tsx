@@ -1,6 +1,7 @@
 import React from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { IconName, IconTile, Screen } from '../../components/ui';
@@ -24,7 +25,7 @@ export default function ProfileView() {
     { icon: 'construct-outline', title: 'Provider Mode', sub: 'Accept jobs and update their status as a technician', onPress: () => nav.navigate('ProviderJobs'), testID: 'open-provider-mode' },
     { icon: 'flask-outline', title: 'Technology Feasibility Tests', sub: 'Run the device checks for this prototype', onPress: () => nav.navigate('FeasibilityTests'), testID: 'open-feasibility' },
     { icon: 'help-circle-outline', title: 'Help & Support', sub: 'Get assistance', onPress: () => soon('Help & Support') },
-    { icon: 'information-circle-outline', title: 'About SANAD', sub: 'Version 0.4 (Sprint 4)', onPress: () => soon('About SANAD') },
+    { icon: 'information-circle-outline', title: 'About SANAD', sub: `Version ${Constants.expoConfig?.version ?? ''} (Sprint 5, Version 2)`, onPress: () => soon('About SANAD') },
   ];
 
   return (

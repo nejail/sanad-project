@@ -166,9 +166,12 @@ All 32 checks above were run against `firebase/firestore.rules` in the Firestore
 | 7 | Live tracking | Verified on phones (28 Nov) | First run (SND-1043 to SND-1045): nothing was written because the technicians' phones did not allow location. After allowing location (While Using, Precise), SND-1046 wrote `orders/SND-1046-VQHV/tracking/live` (`location`, `etaMin`, `updatedAt`) and Technician 2's `lastLocation` and `geohash`. Still foreground only. |
 | 14 | Rate the technician | Verified on phones (28 Nov) | `reviews/SND-1043-VQHV`, `SND-1044-VQHV` and `SND-1045-VQHV` were created by the driver (5 stars each), one per order. |
 | 13 | Car photo upload | Verified on phones (28 Nov) | Each of SND-1043 to SND-1046 has `photoPath` under `order-photos/{uid}/` and a `photoUrl`, and the photo showed on the technician's job. |
-| 15 | Book again | Not verified on a phone | Unit tests only. |
+| 15 | Book again | Verified on a phone (28 Nov) | After the final review fix, Book again opens Location with the last address, then books the same service. Also tested end to end in `__tests__/appFlows.test.tsx`. |
+| 2 | Find on Map (typed location) | Verified on a phone (28 Nov) | With GPS off, the typed place was found on the map, the pin checked and the order placed there. Also tested end to end, including a place that is not found (the driver taps the map). |
 
 **Three-phone test (28 Nov 2026):** Hassan was the driver, Nasser was Test Technician 1 (plate 1111) and Mohammed was Test Technician 2 (plate 2222), all on the iOS Release build installed from Xcode. Order ids: SND-1043-VQHV, SND-1044-VQHV, SND-1045-VQHV, SND-1046-VQHV.
+
+**Phone check of the final fixes (28 Nov 2026):** after PR #5's last fixes, Nasser tapped through normal booking with GPS, GPS off with Find on Map, and Book again on a phone. All three worked.
 
 ## Known limits from the final code review (28 Nov 2026)
 

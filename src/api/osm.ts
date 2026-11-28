@@ -32,7 +32,7 @@ const NOMINATIM_TERMS: Record<PlaceKind, string> = {
   carwash: 'car wash',
 };
 export const OSRM_URL = 'https://router.project-osrm.org/route/v1/driving';
-const USER_AGENT = 'SANAD-prototype/0.3 (CMU-Q 67-443 student project)';
+const USER_AGENT = 'SANAD-prototype/0.5 (CMU-Q 67-443 student project)';
 const TIMEOUT_MS = 12000; // OSRM
 const OVERPASS_TIMEOUT_MS = 20000;
 
