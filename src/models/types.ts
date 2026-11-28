@@ -143,6 +143,9 @@ export interface Order {
   customerName?: string;
   customerPhone?: string; // 8-digit Qatar number, so the technician can call the driver
   customerPushToken?: string; // Expo push token, so status changes reach the driver with the app closed
+  offeredTo?: string; // providers/{uid} the job is offered to right now (V2 feature 8)
+  offeredAt?: string; // when it was offered to them, so it can move on after 2 minutes
+  offeredBefore?: string[]; // technicians it was already offered to
 }
 
 export interface BookingDraft {

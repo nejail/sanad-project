@@ -102,13 +102,14 @@ describe('ProviderRepo with Firestore', () => {
     expect(await repo.loadProfile('uid-driver')).toBeNull();
   });
 
-  it('shows open provider orders live, leaving out simulated ones', () => {
+  it('shows open provider orders offered to this technician live, leaving out simulated ones', () => {
     const db = new FakeFirestore();
     const repo = new ProviderRepo(db);
     const seen: string[][] = [];
-    const stop = repo.listenOpenJobs((orders) => seen.push(orders.map((o) => o.id)), () => undefined);
-    seed(db, order('SND-1'));
-    seed(db, order('SND-2', { dispatch: 'simulated' }));
+    const stop = repo.listenOpenJobs('prov-1', (orders) => seen.push(orders.map((o) => o.id)), () => undefined);
+    seed(db, order('SND-1', { offeredTo: 'prov-1' }));
+    seed(db, order('SND-2', { dispatch: 'simulated', offeredTo: 'prov-1' }));
+    seed(db, order('SND-3', { offeredTo: 'prov-2' })); // offered to another, nearer technician
     expect(seen[seen.length - 1]).toEqual(['SND-1']);
     stop();
     expect(db.listenerCount).toBe(0);

@@ -26,6 +26,7 @@ export function decodeOrder(id: string, data: Record<string, unknown>): Order {
     createdAt: toIso(d.createdAt),
     updatedAt: toIso(d.updatedAt),
     acceptedAt: d.acceptedAt ? toIso(d.acceptedAt) : null,
+    offeredAt: d.offeredAt ? toIso(d.offeredAt) : null,
     schedule: d.schedule ?? { kind: 'asap', date: null, time: null },
     car: d.car ?? { id: '', label: 'Car' },
     payment: d.payment ?? { method: 'cash', status: 'unpaid' },
@@ -69,11 +70,14 @@ export class ProviderRepo {
     return data ? decodeProvider(uid, data) : null;
   }
 
-  /** Live list of orders sent to providers that no technician has accepted yet (simulated orders are left out). */
-  listenOpenJobs(next: (orders: Order[]) => void, error: (e: Error) => void): () => void {
+  /**
+   * Live list of orders offered to this technician that no one has accepted yet (simulated orders
+   * are left out). Each order is offered to the nearest online technician only (V2 feature 8).
+   */
+  listenOpenJobs(uid: string, next: (orders: Order[]) => void, error: (e: Error) => void): () => void {
     return this.api.onQuery(
       COLLECTIONS.orders,
-      [['dispatch', '==', 'provider'], ['providerId', '==', null], ['status', '==', 'confirmed']],
+      [['dispatch', '==', 'provider'], ['providerId', '==', null], ['status', '==', 'confirmed'], ['offeredTo', '==', uid]],
       (docs) => next(docs.map((d) => decodeOrder(d.id, d.data))),
       error,
     );

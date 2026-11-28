@@ -83,10 +83,10 @@ export function isSimulated(order: Pick<Order, 'dispatch'>): boolean {
 }
 
 /**
- * Live tracking from the technician's real location is V2 feature 7. Until it is ready the van's
- * movement on the map is always simulated, and Track Order shows a "Demo Mode" badge (feature 10).
+ * Live tracking from the technician's real location (V2 feature 7) is ready: orders taken by a real
+ * technician follow their location, so the "Demo Mode" badge (feature 10) stays for simulated orders only.
  */
-export const LIVE_TRACKING_READY = false;
+export const LIVE_TRACKING_READY = true;
 
 export function showsDemoBadge(order: Pick<Order, 'dispatch'>): boolean {
   return !LIVE_TRACKING_READY || isSimulated(order);
